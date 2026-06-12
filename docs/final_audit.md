@@ -11,5 +11,5 @@
 9. Biggest weaknesses: likely synthetic evidence, uncertain real-robot scalability, and a narrow formal scope.
 10. Paper-readiness judgment: revise.
 11. Exact Downloads PDF path: C:/Users/wangz/Downloads/43.pdf
-12. GitHub URL: pending
+12. GitHub URL: https://github.com/Jason-Wang313/43_robotic_plan_recoverability
 13. Orchestrator Desktop copy: pending orchestrator copy
