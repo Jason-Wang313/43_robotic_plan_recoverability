@@ -1,0 +1,23 @@
+# Hidden Assumptions
+
+- Prediction loss is enough for control. | Sparse planner-exploited errors can dominate success. | Center repair on the counterexample that actually hurts planning.
+- Repairs should be global. | Many mismatch modes are local and structural. | Use guarded local transition edits.
+- Replanning after failure is sufficient. | The same false transition can be exploited again. | Make the model itself remember the counterexample.
+- Uncertainty is the right trigger. | Confident wrong models can still be exploited. | Trigger repair from execution contradictions.
+- Residuals are smooth. | Contact and affordance changes can be discontinuous. | Allow guarded discontinuous patches.
+- Domain randomization covers deployment. | Deployment may introduce unseen contact regimes. | Repair at deployment time.
+- A verifier is enough. | A detached check does not change future rollouts. | Update the planner-facing model.
+- Reward reveals the failure. | A failed transition is visible before reward accumulates. | Use action-outcome contradictions.
+- A learned latent preserves the repair variable. | Latents may hide the causal variable. | Keep repairs anchored to observable predicates when possible.
+- Environment stationarity is a safe assumption. | Robots change the world as they act. | Give patches explicit scope and retirement conditions.
+- Planner errors are downstream only. | Planners actively exploit optimistic false transitions. | Use planner-exploitation counterexamples.
+- One-step accuracy is the objective. | Long-horizon plan validity is the objective. | Evaluate repeated-failure prevention.
+- More data is always enough. | A structural omission may need a transition edit. | Separate data collection from model repair.
+- Recovery is mainly a policy problem. | Sometimes the world model is the bottleneck. | Repair before replanning.
+- Confidence routing solves action choice. | It does not rewrite the false transition. | Make repair central.
+- A single training objective fits all users. | Prediction and planning value different errors. | Use a control-weighted repair objective.
+- Failures are independent. | The same hole can be exploited repeatedly. | Track exact repeated exploitation.
+- Semantic priors dominate physical evidence. | Grounded counterexamples should override them. | Let execution win over priors.
+- Benchmark success generalizes to the tail. | Rare critical errors can be hidden by averages. | Stress sparse critical mismatches.
+- Small updates are always better. | Some changes are discontinuous. | Permit minimal discontinuous edits.
+- The right abstraction is fixed. | A failure may reveal a missing state distinction. | Allow repairs to create new guards.
