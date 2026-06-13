@@ -1,0 +1,27 @@
+[
+  {
+    "method": "No repair",
+    "success_rate": 0.664,
+    "mean_expansions": 1.0
+  },
+  {
+    "method": "Prediction-centric",
+    "success_rate": 0.748,
+    "mean_expansions": 1.252
+  },
+  {
+    "method": "CCRA exact guard",
+    "success_rate": 1.0,
+    "mean_expansions": 2.008
+  },
+  {
+    "method": "CCRA under-scoped guard",
+    "success_rate": 0.859,
+    "mean_expansions": 1.585
+  },
+  {
+    "method": "CCRA over-scoped guard",
+    "success_rate": 1.0,
+    "mean_expansions": 2.746
+  }
+]

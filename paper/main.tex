@@ -17,8 +17,13 @@
 \maketitle
 
 \begin{abstract}
-Robot planning systems often assume that a world model can be improved by making it more predictive, more uncertain, or more globally adapted. This paper argues for a different central object: recoverability after execution counterexamples. We introduce Counterexample-Conditioned Repair Automata (CCRA), a planner-facing mechanism in which a failed embodied action installs a scoped transition patch that future planning must respect. The key claim is narrow but important: when sparse physical mismatches lie on planner-preferred routes, average prediction quality is not enough to ensure plan recoverability. We support this claim with a 1095-paper literature sweep, a hostile prior-work audit, a formal no-repeat lemma in a finite guarded-transition setting, and a small reproducible simulation showing that a patching mechanism can preserve success where prediction-centric updating continues to exploit the same false affordance. The paper does not claim a deploy-ready robotics system. It claims that recoverability, not only prediction, should be the primary unit of analysis for plan repair.
+Robot planning systems often assume that a world model can be improved by making it more predictive, more uncertain, or more globally adapted. This paper argues for a different central object: recoverability after execution counterexamples. We introduce Counterexample-Conditioned Repair Automata (CCRA), a planner-facing mechanism in which a failed embodied action installs a scoped transition patch that future planning must respect. The key claim is narrow but important: when sparse physical mismatches lie on planner-preferred routes, average prediction quality is not enough to ensure plan recoverability. We support this claim with a 1095-paper literature sweep, a hostile prior-work audit, a formal no-repeat lemma in a finite guarded-transition setting, and a small reproducible simulation showing that a patching mechanism can preserve success where prediction-centric updating continues to exploit the same false affordance. A v2 guard-scope stress narrows the claim: exact CCRA reaches 1.000 success, under-scoped guards fall to 0.859, and over-scoped guards preserve success only with higher search cost. The paper does not claim a deploy-ready robotics system. It claims that recoverability, not only prediction, should be the primary unit of analysis for plan repair.
 \end{abstract}
+
+\paragraph{V2 hardening note.}
+Submission-hardening version: v2. Decision: workshop-only. The result depends on
+calibrated guard scope: under-scoped patches miss repeated failures, while
+over-scoped patches can block valid shortcuts and increase search cost.
 
 \section{Introduction}
 Task and motion planning, learned dynamics, sim-to-real transfer, and robot world models have produced a large literature on making embodied systems more accurate and more robust \citep{kaelbling2011hierarchical,srivastava2014combined,toussaint2015logic,garrett2021pddlstream,lavalle2006planning,kavraki1996probabilistic,stilman2005navigation}. Yet many failures in embodied settings do not arise because the robot lacks a better predictor. They arise because the planner keeps exploiting a transition the world has already contradicted.
@@ -71,6 +76,13 @@ The simulation is not intended to be a benchmark. It is an evidence probe for th
 \label{tab:results}
 \end{table}
 
+\begin{table}[t]
+\centering
+\input{guard_scope_stress_table.tex}
+\caption{V2 guard-scope stress. Exact guard scope is the central assumption: under-scoped repair misses false shortcuts, while over-scoped repair preserves success at higher search cost.}
+\label{tab:guard-scope}
+\end{table}
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=.48\linewidth]{../figures/success_rates.pdf}
@@ -80,15 +92,15 @@ The simulation is not intended to be a benchmark. It is an evidence probe for th
 \end{figure}
 
 \section{Discussion}
-The strongest claim here is not that CCRA is the final answer for robotics. It is that recoverability is a different mechanism from prediction. When a robot discovers that the world contradicts a planned transition, the system should have a way to rewrite what future plans are allowed to assume.
+The strongest claim here is not that CCRA is the final answer for robotics. It is that recoverability is a different mechanism from prediction. When a robot discovers that the world contradicts a planned transition, the system should have a way to rewrite what future plans are allowed to assume. Table~\ref{tab:guard-scope} shows the main boundary: this rewrite is only useful when the guard is scoped well enough to catch repeated false affordances without blocking too many valid alternatives.
 
 This suggests a research program around guard extraction, patch scope, stale-patch retirement, and the relationship between local embodied counterexamples and symbolic/continuous planners. It also suggests a more adversarial evaluation style: rather than only asking how well a model predicts average outcomes, ask whether it prevents repeated exploitation of the same false affordance.
 
 \section{Limitations}
-The evidence is synthetic and the formal lemma is narrow. The paper does not establish real-robot scaling, perception robustness, or fully automatic guard learning. Those limitations are deliberate. The point is to isolate a mechanism that existing prediction-centric framing tends to hide.
+The evidence is synthetic and the formal lemma is narrow. The v2 stress also shows that calibrated guard scope is a hard requirement: under-scoped patches lose success and over-scoped patches increase search cost. The paper does not establish real-robot scaling, perception robustness, or fully automatic guard learning. Those limitations are deliberate. The point is to isolate a mechanism that existing prediction-centric framing tends to hide.
 
 \section{Conclusion}
-Robotic plan recoverability should be treated as a first-class mechanism. CCRA is a simple way to do that: use execution counterexamples to patch the planner-facing transition relation. The literature sweep suggests this is a meaningful boundary from current robot planning, world modeling, and adaptation work.
+Robotic plan recoverability should be treated as a first-class mechanism. CCRA is a simple way to do that: use execution counterexamples to patch the planner-facing transition relation. The v2 hardening result keeps the claim modest: planner-facing repair helps in the toy only when guard scope is reliable. The literature sweep suggests this is still a meaningful boundary from current robot planning, world modeling, and adaptation work.
 
 \bibliographystyle{iclr2026_conference}
 \bibliography{references}

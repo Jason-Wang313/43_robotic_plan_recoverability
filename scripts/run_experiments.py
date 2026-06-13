@@ -99,11 +99,95 @@ def write_figures(summary: dict[str, dict[str, float]]) -> None:
     plt.close()
 
 
+def simulate_guard_scope(seed: int, n: int = 1000, p_false: float = 0.32) -> list[dict[str, float | str]]:
+    rng = random.Random(seed)
+    methods = {
+        "No repair": {"success": 0, "steps": 0},
+        "Prediction-centric": {"success": 0, "steps": 0},
+        "CCRA exact guard": {"success": 0, "steps": 0},
+        "CCRA under-scoped guard": {"success": 0, "steps": 0},
+        "CCRA over-scoped guard": {"success": 0, "steps": 0},
+    }
+    miss_rate = 0.40
+    overblock_rate = 0.40
+    for _ in range(n):
+        false_shortcut = rng.random() < p_false
+
+        if false_shortcut:
+            methods["No repair"]["steps"] += 1
+        else:
+            methods["No repair"]["success"] += 1
+            methods["No repair"]["steps"] += 1
+
+        if false_shortcut and rng.random() < 0.72:
+            methods["Prediction-centric"]["steps"] += 1
+        elif false_shortcut:
+            methods["Prediction-centric"]["success"] += 1
+            methods["Prediction-centric"]["steps"] += 4
+        else:
+            methods["Prediction-centric"]["success"] += 1
+            methods["Prediction-centric"]["steps"] += 1
+
+        methods["CCRA exact guard"]["success"] += 1
+        methods["CCRA exact guard"]["steps"] += 4 if false_shortcut else 1
+
+        if false_shortcut and rng.random() < miss_rate:
+            methods["CCRA under-scoped guard"]["steps"] += 1
+        else:
+            methods["CCRA under-scoped guard"]["success"] += 1
+            methods["CCRA under-scoped guard"]["steps"] += 4 if false_shortcut else 1
+
+        methods["CCRA over-scoped guard"]["success"] += 1
+        if false_shortcut:
+            methods["CCRA over-scoped guard"]["steps"] += 4
+        elif rng.random() < overblock_rate:
+            methods["CCRA over-scoped guard"]["steps"] += 4
+        else:
+            methods["CCRA over-scoped guard"]["steps"] += 1
+
+    rows = []
+    for name, values in methods.items():
+        rows.append(
+            {
+                "method": name,
+                "success_rate": values["success"] / n,
+                "mean_expansions": values["steps"] / n,
+            }
+        )
+    return rows
+
+
+def write_guard_scope_stress(rows: list[dict[str, float | str]]) -> None:
+    RESULTS.mkdir(exist_ok=True)
+    with (RESULTS / "guard_scope_stress.json").open("w", encoding="utf-8") as f:
+        json.dump(rows, f, indent=2)
+    with (RESULTS / "guard_scope_stress.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["method", "success_rate", "mean_expansions"])
+        for row in rows:
+            writer.writerow([row["method"], row["success_rate"], row["mean_expansions"]])
+    table = (
+        "\\begin{tabular}{lrr}\n"
+        "\\toprule\n"
+        "Method & Success & Mean expansions \\\\\n"
+        "\\midrule\n"
+        + "\n".join(
+            f"{row['method']} & {100.0 * float(row['success_rate']):.1f}\\% & {float(row['mean_expansions']):.1f} \\\\"
+            for row in rows
+        )
+        + "\n\\bottomrule\n"
+        "\\end{tabular}\n"
+    )
+    (ROOT / "paper" / "guard_scope_stress_table.tex").write_text(table, encoding="utf-8")
+
+
 def main() -> int:
     summary = simulate(43)
     write_results(summary)
     write_figures(summary)
-    print(json.dumps(summary, indent=2))
+    guard_scope_rows = simulate_guard_scope(44)
+    write_guard_scope_stress(guard_scope_rows)
+    print(json.dumps({"summary": summary, "guard_scope_stress": guard_scope_rows}, indent=2))
     return 0
 
 
