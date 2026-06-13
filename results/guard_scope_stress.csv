@@ -1,0 +1,6 @@
+method,success_rate,mean_expansions
+No repair,0.664,1.0
+Prediction-centric,0.748,1.252
+CCRA exact guard,1.0,2.008
+CCRA under-scoped guard,0.859,1.585
+CCRA over-scoped guard,1.0,2.746
