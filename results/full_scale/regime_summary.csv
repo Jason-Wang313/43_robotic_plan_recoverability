@@ -1,0 +1,4 @@
+name,count,success_rate,repeated_counterexample_rate,mean_expansions,recovery_latency,blocked_valid_rate,stale_patch_regret,guard_precision,guard_recall,patch_churn,model_loss,recoverability_score
+mixed_recovery,122880,0.656175,0.308804,3.342823,2.832309,0.111367,0.115239,0.394579,0.403628,0.117716,0.286554,0.493448
+recoverability_required,115200,0.604098,0.413726,3.428197,3.212587,0.117127,0.124629,0.388820,0.383968,0.156902,0.299502,0.397179
+single_counterexample_control,3840,0.769236,0.166669,3.056424,2.394394,0.097640,0.048698,0.408208,0.410228,0.075523,0.252458,0.681339

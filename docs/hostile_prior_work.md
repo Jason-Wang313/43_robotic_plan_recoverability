@@ -522,7 +522,7 @@
 - What it makes less novel: broad learned dynamics / planning claims
 - What it leaves open: how embodied counterexamples should rewrite the model used by planning
 
-## 59. Contingent Task and Motion Planning under Uncertainty for Human–Robot Interactions (2020)
+## 59. Contingent Task and Motion Planning under Uncertainty for Human-Robot Interactions (2020)
 - Problem claimed: Plan or control embodied robot behavior with learned, symbolic, or hybrid models.
 - Actual mechanism introduced: planning/control over a learned or hybrid dynamics model
 - Hidden assumptions: confidence is enough to expose deployment-critical errors
@@ -756,7 +756,7 @@
 - What it makes less novel: broad learned dynamics / planning claims
 - What it leaves open: how embodied counterexamples should rewrite the model used by planning
 
-## 85. HAD-TAMP: Human adaptive task and motion planning for human–robot collaboration in industrial scenario (2026)
+## 85. HAD-TAMP: Human adaptive task and motion planning for human-robot collaboration in industrial scenario (2026)
 - Problem claimed: Plan or control embodied robot behavior with learned, symbolic, or hybrid models.
 - Actual mechanism introduced: planning/control over a learned or hybrid dynamics model
 - Hidden assumptions: the chosen representation exposes the repair-critical physical variables

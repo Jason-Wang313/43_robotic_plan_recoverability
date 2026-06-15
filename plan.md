@@ -1,37 +1,12 @@
-# Plan for Paper 43: Robotic Plan Recoverability
+# Plan
 
-1. Build the evidence base.
-   - Sweep ~1000 papers for broad landscape coverage.
-   - Skim ~300 candidates for relevance and mechanism.
-   - Deep-read ~200-250 strongest/closest papers.
-   - Build a hostile prior set of ~100 papers.
-
-2. Turn the literature into decision artifacts.
-   - Write `docs/related_work_matrix.csv`.
-   - Write `docs/literature_map.md`.
-   - Write `docs/hostile_prior_work.md`.
-   - Write `docs/novelty_boundary_map.md`.
-   - Write `docs/novelty_decision.md`.
-   - Write `docs/claims.md`.
-   - Write `docs/reviewer_attacks.md`.
-   - Write `docs/final_audit.md`.
-
-3. Choose the strongest thesis.
-   - Identify the field box and at least 20 hidden assumptions.
-   - Test candidate directions against hostile prior work.
-   - Select only the mechanism that is genuinely central and defensible.
-
-4. Draft the paper.
-   - Create an anonymous ICLR-style manuscript.
-   - Keep the claims honest and tied to evidence.
-   - Include runnable or reproducible evidence where possible.
-
-5. Build and verify.
-   - Compile the PDF with the official ICLR template.
-   - Check the output and any build logs.
-   - Save the final PDF to `C:/Users/wangz/Downloads/43.pdf`.
-
-6. Publish.
-   - Ensure the repo is complete and runnable.
-   - Commit and push to GitHub as `43_robotic_plan_recoverability`.
-   - Record the GitHub URL and final audit state.
+1. Write the paper-specific full-scale execution plan before edits.
+2. Build a RAM-light deterministic suite that separates prediction quality from plan recoverability.
+3. Include strong controls: no repair, prediction-centric update, uncertainty penalty, action blacklist, global retraining proxy, robust replanning, exact CCRA, learned-guard CCRA, CCRA with retirement, and oracle guard CCRA.
+4. Generate aggregate CSVs, LaTeX tables, and figures from the suite.
+5. Rewrite the manuscript around counterexample-conditioned planner-facing repair.
+6. Expand the paper through methods, results, guard-scope analysis, stale-patch analysis, patch-budget stress, negative controls, safety, reproducibility, and appendices.
+7. Build and visually verify the final PDF.
+8. Export only the final manuscript to `C:/Users/wangz/Downloads/43.pdf`.
+9. Update status, audit, readiness, and reproducibility docs.
+10. Commit and push before starting Paper44.

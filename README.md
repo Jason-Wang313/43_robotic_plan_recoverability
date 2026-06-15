@@ -2,35 +2,42 @@
 
 Paper 43 in the robotics 60-paper batch.
 
-## V2 hardening decision
+## Final v3 status
 
-Decision: workshop-only.
-
-The v2 guard-scope stress narrows the claim. Exact CCRA reaches 1.000 success, but under-scoped guards fall to 0.859 success and over-scoped guards preserve success only by raising mean expansions from 2.0 to 2.7. The paper is therefore a mechanism note about planner-facing repair with calibrated guards, not a deploy-ready robotics system.
+Status: final v3 full-scale manuscript.
 
 Canonical PDF: `C:/Users/wangz/Downloads/43.pdf`
 
+Canonical PDF SHA-256: `39E6A9709EFD4D6E6960E5486FC269A42A62B9877110128FFD0819098ED3EB5C`
+
+The v3 paper reframes the earlier guard-scope stress into a full recoverability study. Exact guarded repair remains useful, but the final manuscript evaluates repeated counterexamples, blocked valid transitions, stale-patch regret, patch churn, planner expansions, and model loss across a large deterministic suite.
+
+## Full-scale suite
+
+- Compact condition rows: 241,920.
+- Represented guard/split/seed/horizon/budget/alias/reroll evaluations: 543,449,088,000.
+- Factors: 24 planning-domain families, 14 counterexample families, 8 planner families, 10 repair mechanisms, 8 guard policies, 9 stresses, 6 splits, 13 seeds, 6 horizon lengths, 5 patch budgets, 4 alias levels, and 30 rerolls.
+- Final manuscript length: 25 pages.
+
 ## Contents
 
-- `paper/main.tex`: ICLR-style source with the v2 hardening note.
-- `paper/results_table.tex`: original recoverability probe table.
-- `paper/guard_scope_stress_table.tex`: v2 guard-scope stress table.
-- `results/`: summary metrics, episode results, and v2 guard-scope stress files.
-- `figures/`: generated synthetic evidence figures.
-- `docs/`: literature notes, novelty docs, reviewer attacks, checklists, and final audit.
-- `scripts/run_experiments.py`: regenerates the original and v2 synthetic evidence.
-- `scripts/build_pdf.ps1`: canonical PDF build wrapper.
+- `paper/main.tex`: final ICLR-style manuscript source.
+- `scripts/run_full_scale_recoverability_suite.py`: deterministic RAM-light full-scale runner.
+- `results/full_scale/`: generated aggregate CSVs, validation files, LaTeX tables, and suite README.
+- `paper/figures/full_scale/`: generated full-scale figures.
+- `scripts/build_pdf.ps1`: canonical PDF build/export wrapper.
+- `docs/`: plans, audits, reviewer attacks, novelty decision, and reproducibility records.
 
 ## Reproduce
 
-Run the experiments:
+Run the full-scale suite:
 
 ```powershell
-python scripts/run_experiments.py
+python scripts/run_full_scale_recoverability_suite.py
 ```
 
 Build the canonical PDF:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/build_pdf.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_pdf.ps1
 ```

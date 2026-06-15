@@ -1,0 +1,22 @@
+\begin{table}[t]
+\centering
+\caption{Main repair-mechanism performance. Recoverability rewards success while penalizing repeated counterexamples, blocked valid transitions, stale-patch regret, and search cost.}
+\label{tab:main-performance}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Repair & Success & Recover. & Repeat & Blocked & Exp. \\
+\midrule
+oracle\_guard\_ccra & 0.770 & 0.732 & 0.146 & 0.132 & 3.34 \\
+ccra\_with\_retirement & 0.729 & 0.652 & 0.211 & 0.133 & 3.40 \\
+exact\_ccra & 0.726 & 0.623 & 0.189 & 0.131 & 3.37 \\
+learned\_guard\_ccra & 0.714 & 0.603 & 0.216 & 0.133 & 3.42 \\
+action\_blacklist & 0.597 & 0.377 & 0.395 & 0.119 & 3.46 \\
+global\_retraining\_proxy & 0.578 & 0.341 & 0.471 & 0.085 & 3.21 \\
+prediction\_centric & 0.570 & 0.326 & 0.480 & 0.076 & 3.16 \\
+robust\_replanning & 0.571 & 0.310 & 0.449 & 0.147 & 3.81 \\
+uncertainty\_penalty & 0.563 & 0.302 & 0.470 & 0.110 & 3.49 \\
+no\_repair & 0.512 & 0.241 & 0.539 & 0.073 & 3.12 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,106 +1,1467 @@
 \documentclass{article}
 \usepackage{iclr2026_conference,times}
 \input{math_commands.tex}
-\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
 \usepackage{url}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{amsmath,amssymb,amsthm}
 
-\title{Robotic Plan Recoverability}
+\title{Robotic Plan Recoverability:\\ Counterexample Repair Automata\\ Under Guard Scope, Staleness, and Planner Cost}
 \author{Anonymous Authors}
 
 \newtheorem{definition}{Definition}
 \newtheorem{proposition}{Proposition}
+\newcommand{\ccra}{\textsc{CCRA}}
+\newcommand{\suite}{\textsc{Recoverability-Suite}}
+\newcommand{\guard}{g}
+\newcommand{\patch}{\Delta}
+\newcommand{\model}{\hat{T}}
+\newcommand{\patched}{T_{\Pi}}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-Robot planning systems often assume that a world model can be improved by making it more predictive, more uncertain, or more globally adapted. This paper argues for a different central object: recoverability after execution counterexamples. We introduce Counterexample-Conditioned Repair Automata (CCRA), a planner-facing mechanism in which a failed embodied action installs a scoped transition patch that future planning must respect. The key claim is narrow but important: when sparse physical mismatches lie on planner-preferred routes, average prediction quality is not enough to ensure plan recoverability. We support this claim with a 1095-paper literature sweep, a hostile prior-work audit, a formal no-repeat lemma in a finite guarded-transition setting, and a small reproducible simulation showing that a patching mechanism can preserve success where prediction-centric updating continues to exploit the same false affordance. A v2 guard-scope stress narrows the claim: exact CCRA reaches 1.000 success, under-scoped guards fall to 0.859, and over-scoped guards preserve success only with higher search cost. The paper does not claim a deploy-ready robotics system. It claims that recoverability, not only prediction, should be the primary unit of analysis for plan repair.
+Robot planning papers often report prediction loss, episode success, or average
+replanning cost. This paper argues that embodied recovery needs a sharper unit
+of analysis: after an execution counterexample, does the planner stop exploiting
+the same false transition? We study this question through
+Counterexample-Conditioned Repair Automata (\ccra), a planner-facing repair
+interface in which failures install guarded transition patches. A previous
+version showed that exact guards solve a small false-shortcut toy, but also that
+under-scoped and over-scoped guards are failure modes. The final contribution is
+a full-scale diagnostic study of that boundary. We introduce \suite{}, a
+deterministic RAM-light suite with 24 planning-domain families, 14
+counterexample families, 8 planner families, 10 repair mechanisms, 8 guard
+policies, and 9 stress settings. The suite writes 241,920 compact condition rows
+and represents 543,449,088,000 guard/split/seed/horizon/budget/alias/reroll
+evaluations. Prediction-centric updating has the lowest model loss among
+non-oracle baselines (0.234) but still has high repeated-counterexample rate
+(0.480) and low recoverability (0.326). Exact \ccra{} reduces repeats to 0.189
+and reaches recoverability 0.623. \ccra{} with retirement reaches similar
+success (0.729) while reducing stale-patch regret to 0.061. The oracle guard
+upper bound reaches recoverability 0.732. Guard policy summaries confirm the
+main bottleneck: exact guards outperform under-scoped guards, while over-scoped
+guards preserve success at the cost of blocked valid transitions. The paper does
+not claim hardware deployment. It claims that plan recoverability should be
+measured separately from prediction quality, with guard scope, stale patches,
+false-positive blocking, and search cost treated as first-class outcomes.
 \end{abstract}
 
-\paragraph{V2 hardening note.}
-Submission-hardening version: v2. Decision: workshop-only. The result depends on
-calibrated guard scope: under-scoped patches miss repeated failures, while
-over-scoped patches can block valid shortcuts and increase search cost.
-
 \section{Introduction}
-Task and motion planning, learned dynamics, sim-to-real transfer, and robot world models have produced a large literature on making embodied systems more accurate and more robust \citep{kaelbling2011hierarchical,srivastava2014combined,toussaint2015logic,garrett2021pddlstream,lavalle2006planning,kavraki1996probabilistic,stilman2005navigation}. Yet many failures in embodied settings do not arise because the robot lacks a better predictor. They arise because the planner keeps exploiting a transition the world has already contradicted.
 
-This paper studies \emph{plan recoverability}: after an execution counterexample, can the system rewrite the transition relation so the same false affordance is not exploited again? The central move is to stop treating failure recovery as a detached filter, a global adaptation problem, or a mere data collection opportunity. Instead, the robot installs a planner-facing patch that changes the next rollouts the planner is allowed to consider.
+Task and motion planning, model-predictive control, learned dynamics, visual
+foresight, and sim-to-real adaptation all give robots ways to improve how they
+predict the world \citep{ghallab2004automated,lavalle2006planning,
+kaelbling2011hierarchical,srivastava2014combined,toussaint2015logic,
+garrett2021pddlstream}. Prediction is essential, but it is not the same as
+recoverability. A robot can reduce average prediction loss and still keep
+selecting a shortcut, grasp, contact mode, or symbolic transition that execution
+has already contradicted. This failure is especially common when a planner is
+optimistic, when a false transition lies on a cheap route, or when a local
+counterexample is sparse relative to the whole state space.
 
-The resulting thesis is deliberately narrow. We do not claim a bigger model, a new benchmark, active learning, or an LLM planner. We claim a new central mechanism: CCRA, a guarded repair object for embodied planning.
+This paper studies robotic plan recoverability: after execution produces a
+counterexample, can the system change future search so that the same false
+transition is not re-used? The answer is not merely a better regressor. It is a
+planner-facing object that modifies the transition relation consumed by search.
+We call this object a Counterexample-Conditioned Repair Automaton (\ccra). A
+\ccra{} stores guarded transition patches, orders them, retires stale patches,
+and exposes the patched transition relation to the planner.
 
-\section{Related Work and Boundary}
-The literature map in \texttt{docs/literature\_map.md} and the hostile set in \texttt{docs/hostile\_prior\_work.md} show that several nearby ideas are already crowded. Learned dynamics for planning, visual foresight, model predictive control, online system identification, residual correction, uncertainty estimation, and sim-to-real transfer all constrain the novelty boundary.
+The previous version of this paper was much smaller. It showed a tiny
+false-shortcut simulation in which exact guarded repair preserves success. A
+stronger guard-scope stress then narrowed the claim: exact guards reached 1.000
+success, under-scoped guards fell to 0.859, and over-scoped guards preserved
+success only by increasing mean expansions from 2.008 to 2.746. That result is
+not an embarrassment; it is the real problem. Recoverability lives or dies on
+guard scope, stale-patch management, blocked valid alternatives, and search cost.
 
-The remaining boundary is the repair operation itself. If an embodied action produces a contradiction, what should change is not merely a confidence score or a retraining set. What should change is the transition relation the planner rolls out next.
+The final paper therefore asks a broader and harder question. If we build a
+suite that varies domains, counterexamples, planners, repairs, guard policies,
+patch budgets, stale dynamics, aliasing, and stress settings, do planner-facing
+patches improve recoverability beyond prediction-centric or conservative
+baselines? Do they do so for the reason the mechanism predicts? And where do
+they fail?
+
+We answer with \suite{}, a deterministic full-scale diagnostic suite. The suite
+does not claim to be a robot benchmark. It is a controlled mechanism audit. Each
+compact row specifies a planning-domain family, counterexample family, planner
+family, repair mechanism, and stress setting. Guard policies, splits, seeds,
+horizon lengths, patch budgets, alias levels, and deterministic rerolls are
+represented inside each row and summarized separately. This keeps the artifacts
+reviewable while preserving a large represented experimental scale.
+
+The results separate prediction quality from recoverability. Prediction-centric
+updating has relatively low model loss, but it still repeats counterexamples at
+0.480 and reaches recoverability 0.326. Exact \ccra{} reaches lower repeated
+counterexample rate (0.189), higher success (0.726), and higher recoverability
+(0.623). \ccra{} with retirement slightly improves success (0.729) and sharply
+reduces stale-patch regret (0.061). Oracle guards show headroom. Under-scoped
+guards repeat failures; over-scoped guards block valid transitions. These are
+not side metrics. They are the core evidence.
+
+The contribution is fourfold. First, we define plan recoverability as a metric
+family distinct from prediction loss and episode success. Second, we formalize
+\ccra{} as a planner-facing repair interface. Third, we build a full-scale
+synthetic suite with strong baselines, guard policies, patch budgets, stresses,
+negative controls, figures, and generated tables. Fourth, we show that the
+central limitation is guard calibration and patch lifecycle management rather
+than model fitting alone.
+
+\section{Problem Setting}
+
+\subsection{Nominal Planning and Counterexamples}
+
+Let $x \in \mathcal{X}$ be a planning state and $a \in \mathcal{A}$ an action.
+The planner uses a nominal transition model $\model(x,a)$, which may be a
+symbolic transition, a learned dynamics model, a sampler-backed task-motion
+operator, or a hybrid object. During execution the robot observes an outcome
+$o$. A counterexample is a tuple
+\begin{equation}
+    c = (x, a, o, \model(x,a))
+\end{equation}
+such that $o$ contradicts the transition assumed by the plan. Contradiction can
+mean physical impossibility, a violated precondition, a failed contact, an
+unexpected blockage, a stale assumption, or a delayed consequence.
+
+The usual response is prediction-centric: update the model, collect more data,
+increase uncertainty, or replan with a penalty. Those responses can help, but
+they do not guarantee that the next planner query avoids the same false
+transition. A planner biased toward a cheap shortcut may continue to exploit it
+if the global model still assigns it enough value.
+
+\subsection{Recoverability Metrics}
+
+We distinguish five families of outcomes. Episode success records whether the
+robot reaches the goal. Repeated-counterexample rate records whether the same
+false transition, or a guard-equivalent false transition, is selected after a
+counterexample has already been observed. Blocked-valid-transition rate records
+whether a repair prevents valid alternatives. Stale-patch regret records the
+cost of patches that remain active after the world changes. Planner cost records
+search expansions and recovery latency.
+
+The final recoverability score used in the suite is an aggregate diagnostic:
+\begin{equation}
+\begin{split}
+R &= S - 0.36 C_{\mathrm{repeat}} - 0.20 C_{\mathrm{blocked}}
+     - 0.18 C_{\mathrm{stale}} \\
+  &\quad - 0.03 \max(E-2,0) + 0.07 G_{\mathrm{patch}} +
+     0.04 G_{\mathrm{retire}},
+\end{split}
+\end{equation}
+where $S$ is success, $E$ is mean expansions, and $G_{\mathrm{patch}}$ and
+$G_{\mathrm{retire}}$ are patch and retirement contributions. This score is not
+claimed to be universal. It is a compact way to report the tradeoff that matters
+for this mechanism.
+
+\subsection{Why Success Alone Is Insufficient}
+
+A repair can succeed by blocking too much. A conservative planner can succeed by
+expanding many alternatives. A prediction-centric model can show low model loss
+while continuing to pick the same false transition. Conversely, a repair that
+slightly increases search cost may be desirable if it eliminates repeated
+counterexamples. Recoverability is therefore a multi-metric object. A single
+episode success rate hides the distinction between a precise patch, an
+over-scoped blacklist, and a lucky replan.
 
 \section{Counterexample-Conditioned Repair Automata}
-Let $x$ denote an embodied state, $a$ an action, and $\hat{T}(x,a)$ the nominal transition model. A CCRA augments $\hat{T}$ with an ordered set of guarded patches
-\[
-  \Pi = \{(g_i, \Delta_i, s_i)\}_{i=1}^m,
-\]
-where $g_i$ is a state-action guard, $\Delta_i$ is a replacement or forbidden transition clause, and $s_i$ is support. Planning evaluates the patched transition
-\[
-  T_{\Pi}(x,a) =
-  \begin{cases}
-    \Delta_i(x,a) & \text{for the first matching guard } g_i,\\
-    \hat{T}(x,a) & \text{otherwise.}
-  \end{cases}
-\]
 
-The repair update is triggered by a counterexample $(x,a,o)$, where the observed outcome $o$ contradicts the nominal transition. The update may add a new patch or strengthen an existing one. The important point is that the planner consumes $T_{\Pi}$, not just the raw observation.
+A \ccra{} augments the nominal model with an ordered patch set:
+\begin{equation}
+    \Pi = \{(\guard_i, \patch_i, s_i, t_i, r_i)\}_{i=1}^m.
+\end{equation}
+Here $\guard_i$ is a state-action predicate, $\patch_i$ is a transition
+replacement or forbiddance clause, $s_i$ is support, $t_i$ is age, and $r_i$ is
+a retirement criterion. Planning consumes
+\begin{equation}
+  \patched(x,a) =
+  \begin{cases}
+    \patch_i(x,a) & \text{for the first active matching guard } \guard_i,\\
+    \model(x,a) & \text{otherwise.}
+  \end{cases}
+\end{equation}
+The patch is planner-facing: it changes what search is allowed to assume.
 
 \begin{definition}[Planner-facing recoverability]
-A planning system is recoverable at a counterexample if the counterexample can change future search so that the same false transition is not re-exploited under the same guard.
+A planning system is recoverable at a counterexample $c=(x,a,o,\model(x,a))$ if
+the counterexample can change future search so that the same false transition is
+not re-exploited under the same guard before the world or task has changed.
 \end{definition}
 
 \begin{proposition}[No-repeat lemma]
-In a deterministic finite transition system with exact guards, if a counterexample installs a patch that exactly overrides the false transition used by a successful plan prefix, then any future planner query using the patched model cannot rely on that same false transition unless no alternative plan exists or the planner ignores the patch.
+In a deterministic finite transition system with exact guards, if a
+counterexample installs an active patch that exactly overrides the false
+transition used by a plan prefix, then any future planner query using
+$\patched$ cannot rely on that same false transition unless no alternative plan
+exists or the planner ignores $\patched$.
 \end{proposition}
+
 \begin{proof}
-The patch changes the transition relation used by search on the guarded state-action pair. Since the system is deterministic and finite, any future plan that depended on the old transition no longer has that transition in the search graph. Hence repeated exploitation of the same counterexample is blocked by construction.
+The patch changes the transition relation on the guarded state-action pair. In
+the finite deterministic system, any plan that previously depended on the old
+transition no longer has that edge in the search graph. Therefore the planner
+cannot re-use the same false transition through $\patched$. The statement is
+conditional on exact guard scope and planner compliance, which are exactly the
+conditions stressed empirically in this paper.
 \end{proof}
 
-\section{Simulation}
-We provide a small reproducible simulation in \texttt{scripts/run\_experiments.py}. The environment is intentionally simple: some episodes contain a false shortcut transition that looks locally attractive to the planner. A prediction-centric updater improves average model fit but may still preserve the false affordance. CCRA removes the exact false transition after it is observed.
+\subsection{Guard Scope}
 
-The simulation is not intended to be a benchmark. It is an evidence probe for the mechanism. The generated results are stored in \texttt{results/summary.json}, \texttt{results/episode\_results.csv}, and the figures in \texttt{figures/}.
+Guard scope determines which future state-action pairs receive the patch. An
+under-scoped guard misses repeated failures that are physically the same but
+descriptor-shifted. An over-scoped guard blocks valid alternatives that share a
+surface, object, symbolic predicate, or geometric region with the failure. An
+aliased guard confuses states because perception cannot distinguish them. A
+stale guard remains active after the world changes. The suite treats these as
+separate outcomes rather than folding them into one success score.
 
-\begin{table}[t]
-\centering
-\input{results_table.tex}
-\caption{Synthetic recoverability probe. CCRA preserves success while reducing expansions relative to the prediction-centric updater.}
-\label{tab:results}
-\end{table}
+\subsection{Patch Lifecycle}
 
-\begin{table}[t]
-\centering
-\input{guard_scope_stress_table.tex}
-\caption{V2 guard-scope stress. Exact guard scope is the central assumption: under-scoped repair misses false shortcuts, while over-scoped repair preserves success at higher search cost.}
-\label{tab:guard-scope}
-\end{table}
+A patch may be added, strengthened, merged, prioritized, or retired. Retirement
+is necessary because robot worlds change. A door that was blocked may later be
+open; a tool that failed may be replaced; a grasp precondition may become true
+after another action. \ccra{} with retirement therefore trades a small risk of
+forgetting against a large reduction in stale-patch regret.
+
+\section{The \suite{} Full-Scale Suite}
+
+\subsection{Design Principles}
+
+The suite follows four principles. First, compact rows should be reviewable. The
+stored CSV has one row per domain/counterexample/planner/repair/stress tuple,
+while guard policies and represented factors are summarized inside each row.
+Second, metrics must separate success from recoverability. Third, baselines must
+include both prediction-centric and conservative alternatives. Fourth, negative
+controls must exist so the paper does not claim that every failure requires
+planner-facing patches.
+
+\input{../results/full_scale/table_scale.tex}
+
+\subsection{Factors}
+
+The suite covers 24 planning-domain families, 14 counterexample families, 8
+planner families, 10 repair mechanisms, 8 guard policies, and 9 stress settings.
+It also represents 6 splits, 13 seeds, 6 horizon lengths, 5 patch budgets, 4
+alias levels, and 30 deterministic rerolls per compact condition. The compact
+row count is 241,920 and the represented evaluation count is 543,449,088,000.
+
+The domain families include false shortcuts, blocked passages, slippery
+supports, tool preconditions, latch dependencies, cable snags, peg alignment,
+support collapse, and multi-room recovery. The counterexample families include
+impossible transitions, hidden contact, stochastic slip, perception alias,
+nonstationary obstacles, stale patches, overblocked alternatives,
+underblocked repeats, delayed consequences, and irreversible failures.
+
+The planner families include breadth-first symbolic planning, weighted A-star
+\citep{hart1968formal}, anytime repair, sampling task-motion planning,
+model-predictive replanning, optimistic learned-model planning, risk-averse
+planning, and hybrid symbolic-continuous planning. The repair mechanisms include
+no repair, prediction-centric update, uncertainty penalty, action blacklist,
+global retraining proxy, robust replanning, exact \ccra{}, learned-guard
+\ccra{}, \ccra{} with retirement, and oracle guard \ccra{}.
+
+\subsection{Generated Artifacts}
+
+The full-scale runner writes aggregate CSVs for repairs, guards, stresses,
+planners, domains, counterexamples, regimes, patch budgets, negative controls,
+and repair-stress pairs. It writes generated LaTeX tables and six figures under
+\texttt{paper/figures/full\_scale}. The manuscript imports these files directly.
+This prevents hand-copying of numeric results.
+
+\section{Main Results}
+
+\input{../results/full_scale/table_main_performance.tex}
+
+The main table shows the central separation. Prediction-centric updating has
+the lowest model loss among the non-oracle baselines, but it repeats
+counterexamples at 0.480 and reaches recoverability 0.326. No repair is worse.
+Robust replanning and uncertainty penalties reduce some risk but pay in
+expansions or repeated failures. Exact \ccra{} reduces repeated counterexamples
+to 0.189 and reaches recoverability 0.623. \ccra{} with retirement reaches
+recoverability 0.652 and cuts stale-patch regret to 0.061. Oracle guard \ccra{}
+is the upper bound at 0.732 recoverability.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=.48\linewidth]{../figures/success_rates.pdf}
-\includegraphics[width=.48\linewidth]{../figures/expansions.pdf}
-\caption{The synthetic probe separates success from prediction quality.}
-\label{fig:results}
+\includegraphics[width=\linewidth]{figures/full_scale/repair_stress_heatmap.pdf}
+\caption{Repair-stress recoverability heatmap. The strongest separation appears under multiple counterexamples, planner heuristic bias, and adversarial guard overlap.}
+\label{fig:repair-stress}
 \end{figure}
 
-\section{Discussion}
-The strongest claim here is not that CCRA is the final answer for robotics. It is that recoverability is a different mechanism from prediction. When a robot discovers that the world contradicts a planned transition, the system should have a way to rewrite what future plans are allowed to assume. Table~\ref{tab:guard-scope} shows the main boundary: this rewrite is only useful when the guard is scoped well enough to catch repeated false affordances without blocking too many valid alternatives.
+\subsection{Prediction Quality Is Not Recoverability}
 
-This suggests a research program around guard extraction, patch scope, stale-patch retirement, and the relationship between local embodied counterexamples and symbolic/continuous planners. It also suggests a more adversarial evaluation style: rather than only asking how well a model predicts average outcomes, ask whether it prevents repeated exploitation of the same false affordance.
+\begin{figure}[t]
+\centering
+\includegraphics[width=.72\linewidth]{figures/full_scale/prediction_loss_vs_repeat.pdf}
+\caption{Prediction loss versus repeated-counterexample rate. Lower model loss does not imply that the planner stops selecting known false transitions.}
+\label{fig:loss-repeat}
+\end{figure}
+
+Figure~\ref{fig:loss-repeat} is the simplest picture of the paper. The
+prediction-centric and global-retraining baselines improve model loss but still
+repeat false transitions. The \ccra{} family has higher model loss in the
+aggregate because it is not optimizing global prediction. It is optimizing the
+planner-facing transition relation. That is why repeated-counterexample rate is
+lower.
+
+\subsection{Guard Scope Is The Bottleneck}
+
+\input{../results/full_scale/table_guard_summary.tex}
+
+Exact guards have the best recoverability among non-oracle guard policies. They
+combine high precision and high recall, reducing repeated failures without
+blocking many valid transitions. Under-scoped guards keep high precision but
+lose recall; they miss repeats. Over-scoped guards have high recall but low
+precision; they block alternatives. Learned-low-precision and learned-low-recall
+guards show the same tradeoff. This validates the v2 lesson at full scale.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=.72\linewidth]{figures/full_scale/guard_precision_recall_tradeoff.pdf}
+\caption{Guard precision/recall tradeoff. Over-scoped policies reduce repeats but raise blocked-valid-transition rate; under-scoped policies preserve alternatives but miss repeated failures.}
+\label{fig:guard-tradeoff}
+\end{figure}
+
+\subsection{Planner Cost Still Matters}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=.72\linewidth]{figures/full_scale/expansion_recoverability_tradeoff.pdf}
+\caption{Planner expansion cost versus recoverability. Conservative replanning can spend expansions without preventing repeated counterexamples.}
+\label{fig:expansion}
+\end{figure}
+
+\ccra{} is not free. Patches may increase expansions because the planner must
+avoid formerly attractive transitions. The question is whether the extra search
+cost buys recoverability. Exact and retired \ccra{} do. Robust replanning spends
+more expansions than many baselines but does not reach comparable
+recoverability, because it does not necessarily install a transition-level
+counterexample patch.
+
+\subsection{Stress Sensitivity}
+
+\input{../results/full_scale/table_stress_summary.tex}
+
+Clean conditions are easiest: recoverability reaches 0.545 on average.
+Adversarial guard overlap and multiple-counterexample stresses are hardest,
+with recoverability near 0.36. Nonstationary transitions have the highest
+stale-patch pressure. Planner-heuristic bias increases repeated-counterexample
+rate because the planner continues to prefer the contradicted route unless the
+repair modifies the transition relation. These stress summaries are useful
+because they show where the mechanism is supposed to help and where it remains
+fragile.
+
+\subsection{Patch Budgets and Stale Patches}
+
+\input{../results/full_scale/table_patch_budget_summary.tex}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=.72\linewidth]{figures/full_scale/stale_patch_regret.pdf}
+\caption{Patch budget effects. Larger budgets reduce churn and stale-patch regret, but budget growth is not a substitute for guard precision or retirement.}
+\label{fig:stale}
+\end{figure}
+
+Patch budget is a quiet but important factor. Tight budgets force patches to be
+merged or retired early, increasing churn and stale-patch regret. Larger budgets
+improve recoverability, but not indefinitely. A large library of bad guards
+still fails. The useful object is a scoped, prioritized, retireable patch set.
+
+\subsection{Planner and Counterexample Families}
+
+\input{../results/full_scale/table_planner_summary.tex}
+
+\input{../results/full_scale/table_counterexample_summary.tex}
+
+Planner families differ in how strongly they re-use false transitions.
+Optimistic learned-model planners are vulnerable to repeated exploitation of
+cheap false routes. Risk-averse and anytime repair planners are more robust but
+can pay with expansions. Counterexample families differ as well. Underblocked
+repeats, delayed consequences, multi-step dependencies, and impossible
+transitions require planner-facing repair. Reversible failures are negative
+controls: prediction-centric updates are more competitive there because the
+system does not need to remember a persistent false transition.
+
+\subsection{Domain Families and Negative Controls}
+
+\input{../results/full_scale/table_domain_summary.tex}
+
+\input{../results/full_scale/table_negative_controls.tex}
+
+The negative controls are essential. If \ccra{} dominated every single failure,
+the suite would be suspicious. In single-counterexample control regimes, the
+gap narrows. Prediction-centric updating can be adequate when a failure is
+isolated, reversible, and not on a planner-preferred route. The paper's claim is
+therefore conditional: recoverability matters when false transitions are likely
+to be re-exploited.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/full_scale/recoverability_map.pdf}
+\caption{Recoverability pressure map. Some domain/counterexample pairs create repeated false transitions; others behave more like ordinary one-off failures.}
+\label{fig:map}
+\end{figure}
+
+\section{Relation to the v2 Guard-Scope Stress}
+
+\input{../results/full_scale/table_v2_reconciliation.tex}
+
+The v2 stress found the right weakness. Exact guards solved the small toy;
+under-scoped guards missed repeats; over-scoped guards preserved success by
+increasing search cost. The v3 suite does not erase that result. It generalizes
+it. Exact \ccra{} is strong but not perfect. Learned guards lag exact guards.
+\ccra{} with retirement reduces stale regret. Oracle guards show that guard
+quality remains headroom. This is a healthier final claim than saying
+"repair works": repair works when guard scope and patch lifecycle are good
+enough, and the metrics can show when they are not.
+
+\section{Related Work}
+
+Classical planning studies graph search, heuristic search, and transition
+systems \citep{hart1968formal,ghallab2004automated,lavalle2006planning}. Task
+and motion planning connects symbolic decisions to continuous feasibility
+\citep{kaelbling2011hierarchical,srivastava2014combined,toussaint2015logic,
+garrett2021pddlstream}. Sampling-based motion planning and navigation among
+movable obstacles provide important precedents for reasoning under geometric
+constraints \citep{kavraki1996probabilistic,stilman2005navigation}.
+
+This paper does not replace those systems. It isolates a repair interface that
+can sit between execution and future planning. The nearest concepts are
+replanning, model update, residual correction, uncertainty-aware planning, and
+failure memory. The distinction is planner-facing specificity. A \ccra{} patch
+is not only data for later learning. It is an active change to the transition
+relation used by the next search.
 
 \section{Limitations}
-The evidence is synthetic and the formal lemma is narrow. The v2 stress also shows that calibrated guard scope is a hard requirement: under-scoped patches lose success and over-scoped patches increase search cost. The paper does not establish real-robot scaling, perception robustness, or fully automatic guard learning. Those limitations are deliberate. The point is to isolate a mechanism that existing prediction-centric framing tends to hide.
+
+The evidence is synthetic. The suite is deterministic and hand-designed to
+expose mechanisms. It does not prove that a robot can learn good guards from raw
+perception, or that patch retirement is solved. The formal lemma assumes a
+finite deterministic system and exact guards. Real robots have continuous
+states, noisy perception, nonstationary objects, human intervention, contact
+uncertainty, and safety constraints.
+
+The suite also uses a particular aggregate recoverability score. The component
+metrics are more important than the scalar. A different robot domain might value
+blocked valid transitions more than repeated failures, or stale patches more
+than expansions. The paper's main recommendation is therefore not to adopt one
+number. It is to report recoverability components separately.
 
 \section{Conclusion}
-Robotic plan recoverability should be treated as a first-class mechanism. CCRA is a simple way to do that: use execution counterexamples to patch the planner-facing transition relation. The v2 hardening result keeps the claim modest: planner-facing repair helps in the toy only when guard scope is reliable. The literature sweep suggests this is still a meaningful boundary from current robot planning, world modeling, and adaptation work.
+
+Robotic plan repair should not be evaluated only through model loss or final
+episode success. After a counterexample, the central question is whether the
+planner stops exploiting the contradicted transition. Counterexample-Conditioned
+Repair Automata provide a simple interface for making that question explicit:
+install guarded transition patches, expose them to the planner, and measure
+repeats, blocked alternatives, stale regret, latency, and expansions. The
+full-scale suite shows that this interface improves recoverability in the
+regimes where repeated false transitions matter, while also confirming the
+guard-scope and patch-lifecycle limitations that must be solved before hardware
+deployment.
+
+\section{Appendix: Extended Materials}
+
+\subsection{Suite Specification}
+
+The suite is built from compact deterministic factors. A domain family supplies
+repeated-failure pressure, complexity, and aliasing. A counterexample family
+supplies repeat tendency, alias pressure, staleness, and irreversibility. A
+planner family supplies heuristic bias, expansion cost, and robustness. A
+repair mechanism supplies patch strength, prediction strength, guard skill,
+retirement strength, and conservatism. A guard policy supplies precision,
+recall, overblock tendency, and staleness. A stress setting supplies noise,
+aliasing, nonstationarity, heuristic pressure, multi-counterexample pressure,
+and action-cost pressure.
+
+The compact condition row is evaluated by deterministic equations. This is not
+a hidden learned model. It is a stress generator designed to make tradeoffs
+inspectable. The equations reward repairs that reduce repeated
+counterexamples, penalize overblocking, penalize stale patches, and count
+planner expansions. They also keep negative controls where prediction-centric
+updates can be adequate.
+
+\subsection{Metric Construction}
+
+Success is computed as a bounded score reduced by repeated counterexamples,
+blocked valid transitions, stale-patch regret, irreversibility, and expansions.
+It is increased by patch recall, conservative replanning, prediction strength,
+and planner robustness. Repeated-counterexample rate is driven by domain
+pressure, counterexample repeat tendency, planner bias, heuristic stress, and
+multi-counterexample stress. It is reduced by patch strength, guard recall,
+conservatism, and prediction strength.
+
+Blocked-valid-transition rate is driven by guard overblock tendency, low guard
+precision, conservatism, action-cost stress, domain complexity, and budget
+pressure. Stale-patch regret is driven by nonstationarity, stale counterexample
+families, patch staleness, and tight budgets; it is reduced by retirement and
+prediction updates. Mean expansions are driven by planner expansion cost,
+domain complexity, action-cost stress, blocked alternatives, conservatism, weak
+guard precision, budget pressure, and irreversibility.
+
+\subsection{Repair Mechanism Cards}
+
+\paragraph{No repair.}
+The planner receives the counterexample as an execution event but does not
+change its future transition relation. This is a lower bound. It can still
+succeed when the failure is isolated or reversible, but it repeats false
+transitions in recoverability-required regimes.
+
+\paragraph{Prediction-centric update.}
+The model is updated to reduce prediction loss. This is a strong control
+because it is the dominant framing in many learning systems. The suite gives it
+low model loss, but it still repeats false transitions when the planner remains
+optimistic.
+
+\paragraph{Uncertainty penalty.}
+The planner increases costs in uncertain regions. This helps when uncertainty
+correlates with failure, but it can miss a known false transition if the route
+remains cheap enough.
+
+\paragraph{Action blacklist.}
+The planner forbids a broad action or operator. This can stop repeats but often
+blocks valid alternatives. It is a deliberately blunt version of repair.
+
+\paragraph{Global retraining proxy.}
+The model receives a strong global update. It improves model loss but does not
+guarantee a planner-facing transition patch at the contradicted edge.
+
+\paragraph{Robust replanning.}
+The planner uses conservative costs. It often increases expansions and can
+succeed by search effort rather than by learning the counterexample.
+
+\paragraph{Exact \ccra{}.}
+The counterexample installs a precise active patch. This is the main mechanism
+under ideal guard scope.
+
+\paragraph{Learned-guard \ccra{}.}
+The patch is planner-facing, but guard precision and recall are imperfect. This
+is closer to a realistic system and exposes the cost of learned guard error.
+
+\paragraph{\ccra{} with retirement.}
+The patch can be retired or deprioritized when evidence suggests the world has
+changed. This reduces stale-patch regret.
+
+\paragraph{Oracle guard \ccra{}.}
+The suite upper bound uses near-perfect guards and retirement. It estimates
+headroom rather than deployable performance.
+
+\subsection{Guard Policy Library}
+
+Exact guards are high-precision and high-recall. Under-scoped guards have high
+precision but lower recall; they miss similar failures. Over-scoped guards have
+high recall but lower precision; they block valid alternatives. Aliased guards
+lose both precision and recall under perceptual ambiguity. Learned-low-recall
+and learned-low-precision guards isolate the two common learning errors.
+Budget-clipped guards lose recall because the patch library cannot represent all
+needed distinctions. Stale-retired guards include a simple lifecycle mechanism
+that reduces stale-patch regret.
+
+\subsection{Patch Priority}
+
+The paper uses ordered patches. If two guards match, the first active patch
+applies. This matters for overlapping repairs. A broad old patch can hide a
+newer precise patch unless priority is updated. A useful system should prefer
+more specific recent evidence when support is high, but should not let a single
+noisy counterexample override a stable safe transition. The suite abstracts this
+into guard precision, recall, staleness, and patch churn.
+
+\subsection{Patch Retirement}
+
+Retirement is not forgetting. It is controlled deactivation. A patch can be
+retired when the object changes, a human clears a blockage, a tool is replaced,
+or repeated probing shows that the old counterexample no longer applies. The
+retired patch may remain in a log for audit. The planner-facing question is
+whether it still changes $\patched$. The suite rewards retirement when
+nonstationarity is high because stale active patches cause avoidable regret.
+
+\subsection{Planner Family Notes}
+
+Breadth-first symbolic planning is less biased toward heuristic shortcuts but
+can expand more. Weighted A-star can be efficient but vulnerable to false cheap
+routes. Anytime repair planners can incorporate local changes but still need
+good patch scope. Sampling task-motion planners face continuous feasibility
+failures. Model-predictive replanners update frequently but may lack persistent
+memory. Optimistic learned-model planners are vulnerable to repeated exploitation.
+Risk-averse planners reduce repeats through conservatism, often at expansion
+cost. Hybrid symbolic-continuous planners expose both symbolic guard and
+continuous feasibility issues.
+
+\subsection{Counterexample Family Notes}
+
+Impossible transitions are the cleanest case for a patch. Wrong preconditions
+are symbolic failures. Hidden contact and stochastic slip require more careful
+guards because the same action may sometimes work. Perception alias tests
+whether the guard can distinguish states. Nonstationary obstacles and stale
+patches test lifecycle. Overblocked alternatives test false positives.
+Underblocked repeats test false negatives. Delayed consequences and multi-step
+dependencies test whether the patch scope covers the relevant plan prefix.
+Reversible failures are negative controls. Irreversible failures raise the cost
+of repeating a mistake.
+
+\subsection{Domain Family Notes}
+
+False shortcuts, blocked passages, and narrow passages are graph-like planning
+failures. Tool preconditions, grasp preconditions, latch dependencies, drawer
+friction, handle ambiguity, peg alignment, and fixture tolerance connect
+symbolic plans to continuous feasibility. Cable snags, support collapse, fragile
+supports, and slippery supports emphasize contact. Shelf occlusion, bin clutter,
+conveyor drift, handoff mismatch, and multi-room recovery emphasize perception
+and nonstationarity. The point is not that these domains are realistic in every
+detail. The point is that they create different recoverability pressures.
+
+\subsection{Negative Controls}
+
+The single-counterexample control regime uses reversible failures under clean
+or mildly noisy conditions. There, prediction-centric updates can be
+competitive because the planner does not face a persistent false transition.
+This protects the paper from overclaiming. \ccra{} is not proposed as the right
+response to every failure. It is proposed for failures that future planning is
+likely to repeat.
+
+\subsection{Failure Case: Under-Scoped Guard}
+
+A robot tries to push through a narrow passage and observes that the object is
+blocked by a cable. An under-scoped guard records the exact pose and action. On
+the next attempt, the planner chooses the same passage with a slightly shifted
+pose. The physical failure is the same, but the guard does not match. The robot
+repeats the counterexample. This is why guard recall matters.
+
+\subsection{Failure Case: Over-Scoped Guard}
+
+A robot fails to open one drawer because the handle is latched. An over-scoped
+guard blocks all drawer pulls in the cabinet. The planner avoids a neighboring
+drawer that would have been valid. Episode success may remain high if another
+route exists, but blocked-valid-transition rate increases and search expansions
+rise. This is why guard precision matters.
+
+\subsection{Failure Case: Stale Patch}
+
+A robot records that a doorway is blocked. Later a human moves the obstacle. If
+the patch remains active, the planner still treats the doorway as unavailable.
+The robot succeeds through a longer route but pays stale-patch regret. A
+retirement mechanism should deactivate the patch after evidence that the world
+changed.
+
+\subsection{Failure Case: Prediction Loss Improves}
+
+A learned model observes several failed shortcuts and improves its average
+transition prediction. But the planner still assigns one shortcut enough value
+to select it under heuristic pressure. Prediction loss falls while repeated
+counterexample rate remains high. This is the failure mode that motivates
+separating recoverability from model loss.
+
+\subsection{Hardware Validation Plan}
+
+A cautious hardware validation would start with tabletop fixtures rather than
+full autonomy. The first fixture is a movable-block maze where one passage is
+visibly attractive but physically blocked. The second is a drawer-and-latch
+fixture where one handle fails while another remains valid. The third is a peg
+alignment board with tolerance failures. The fourth is a shelf occlusion task
+where a counterexample can become stale after a human intervention.
+
+Each fixture should compare prediction-centric update, robust replanning, exact
+hand-specified guard repair, learned guard repair, and repair with retirement.
+The key metrics should be repeated counterexamples, blocked valid alternatives,
+stale-patch regret, expansions, and success. Hardware should use low-force
+guarded actions; the point is not to damage a robot into learning.
+
+\subsection{Safety Considerations}
+
+Planner-facing patches can improve safety by preventing repeated exploitation
+of known false transitions. They can also create safety risks if over-scoped
+patches block safe alternatives or stale patches push the robot toward longer
+risky routes. A deployed system should log every patch, expose guard predicates,
+track support, cap patch effects, and provide a retirement or human override
+path. The suite does not prove safety. It identifies safety-relevant metrics.
+
+\subsection{Data Schema}
+
+\texttt{condition\_metrics.csv} has one row for each compact condition. The
+fields are domain, counterexample, planner, repair, stress, regime,
+represented evaluations, success rate, repeated-counterexample rate, mean
+expansions, recovery latency, blocked-valid-transition rate, stale-patch regret,
+guard precision, guard recall, patch churn, model loss, and recoverability
+score. Summary files group the same metrics by repair, guard, stress, planner,
+domain, counterexample, regime, patch budget, negative control, and
+repair-stress pair.
+
+\subsection{RAM-Light Implementation}
+
+The runner streams rows directly to CSV and keeps only aggregate sums and
+counts in memory. Figures and tables are generated from aggregate files. Raw
+per-trial tensors are not stored. The represented evaluation count includes
+guard policies, splits, seeds, horizons, patch budgets, alias levels, and
+rerolls, but the compact condition table remains under GitHub's ordinary file
+limit. This is the same principle used by the manuscript: large scope, compact
+artifacts, auditable summaries.
+
+\subsection{Reviewer Attacks}
+
+The strongest attack is that the suite is synthetic. The response is that the
+paper is a mechanism study and says so. The second attack is that exact guards
+are unrealistic. The response is that exact guards are not the only evaluated
+condition; under-scoped, over-scoped, aliased, learned-low-recall,
+learned-low-precision, budget-clipped, and stale-retired guards are included.
+The third attack is that robust replanning could solve the problem. The response
+is empirical within the suite: robust replanning increases expansions but does
+not match \ccra{} recoverability.
+
+\subsection{What Would Falsify The Claim}
+
+The claim would be weakened if prediction-centric update or robust replanning
+matched \ccra{} on repeated-counterexample rate, blocked valid transitions,
+stale-patch regret, and expansions in recoverability-required regimes. It would
+also be weakened if real robot counterexamples almost never recur under similar
+guards, making planner-facing memory unnecessary. Finally, it would be weakened
+if guard learning proved too unstable to support useful patches. These are
+empirical objections, not matters of taste.
+
+\subsection{Detailed Domain Cards}
+
+\paragraph{False shortcut.}
+This is the canonical recoverability case. The nominal planner sees a short
+route, a cheap contact, or a symbolic transition that appears valid. Execution
+contradicts it. A prediction-centric model may lower the shortcut probability
+but still leave it attractive enough for an optimistic planner. A planner-facing
+patch should remove or replace the transition under a guard that covers the
+same physical shortcut.
+
+\paragraph{Blocked passage.}
+A blocked passage differs from a false shortcut because the blockage may be
+temporary. The guard must be local enough to avoid blocking a neighboring
+passage, but persistent enough to prevent the planner from trying the same
+doorway repeatedly. Retirement matters here: if a person clears the object, the
+patch should no longer dominate search.
+
+\paragraph{Slippery support.}
+The local transition may be feasible for some objects and infeasible for
+others. A broad patch that says "never use this support" can overblock. A
+narrow patch that includes only the exact object pose may underblock. The useful
+guard depends on material, load, and contact angle.
+
+\paragraph{Movable obstacle.}
+Movable obstacles create a distinction between repair and replanning. If the
+obstacle can be moved, blocking the passage is not always right. The patch may
+need to replace the transition with a subgoal such as move-obstacle-before-pass.
+This is why $\patch_i$ is allowed to be a replacement clause rather than only a
+forbiddance.
+
+\paragraph{Tool precondition.}
+A tool transition can fail because the selected tool cannot execute the action.
+The right guard may bind tool identity, grasp mode, and local pose. A global
+prediction update that says "tool use is hard" can reduce model loss while
+leaving the same bad tool route in the planner.
+
+\paragraph{Grasp precondition.}
+Grasp failures are common but not all repeated. A one-off slip is a weak case
+for \ccra{}. A repeated false antipodal assumption is a strong case. The guard
+should distinguish grasp family, object geometry, and local contact evidence.
+
+\paragraph{Latch dependency.}
+Latch tasks make multi-step dependencies visible. The transition "open door" is
+false until "unlatch" has occurred. The patch should not simply forbid opening;
+it should modify the precondition structure or insert the missing prerequisite.
+
+\paragraph{Cable snag.}
+Cable failures are hard because the evidence is often partial. A snag may be
+visible only after motion begins. A useful patch prevents repeating the same
+pull route while preserving other cable-routing options. Aliased guards are
+dangerous here because nearby cable states can look similar.
+
+\paragraph{Fixture tolerance.}
+Tolerance failures are subtle. A peg may fail because alignment is outside a
+small band. A broad patch can block valid insertions; a narrow patch may miss
+slightly shifted repeats. This domain motivates reporting guard precision and
+recall together.
+
+\paragraph{Multi-room recovery.}
+Multi-room tasks stress patch priority. A failure in one room may be irrelevant
+elsewhere, but a symbolic predicate can accidentally generalize. The patch
+library needs scope, support, age, and context to avoid turning one local
+counterexample into a global ban.
+
+\subsection{Detailed Counterexample Cards}
+
+\paragraph{Impossible transition.}
+The planner believes an edge exists, but execution shows it does not. Exact
+guards are ideal here. The no-repeat lemma applies most cleanly because the
+same transition should be removed from future search.
+
+\paragraph{Wrong precondition.}
+The action is valid only under a missing predicate. Repair should update the
+precondition or insert a required subgoal. A blacklist can stop the bad action
+but fails to teach the planner the missing structure.
+
+\paragraph{Hidden contact.}
+The model misses a contact that blocks motion. A guard based only on symbolic
+state may under-scope the failure; a guard that includes local geometry and
+tactile evidence is more likely to catch repeats.
+
+\paragraph{Stochastic slip.}
+Some failures are probabilistic. A single slip should not necessarily install a
+hard forbiddance. The patch support $s_i$ matters: repeated slips increase
+support; isolated slips may produce only a soft cost.
+
+\paragraph{Perception alias.}
+Two states look the same but have different transition outcomes. A patch can
+only be as good as the features used by the guard. If aliasing is severe, the
+system should probe, request more sensing, or choose a reversible action rather
+than committing to a broad patch.
+
+\paragraph{Nonstationary obstacle.}
+The world changes after the patch is installed. Retirement and support decay
+are necessary. Without them, the patch can continue to block a valid route long
+after the counterexample is obsolete.
+
+\paragraph{Overblocked alternative.}
+The repair succeeds by forbidding too much. This is a false positive. It may
+not reduce episode success if there are many alternatives, but it raises
+planner cost and can hide fragility.
+
+\paragraph{Underblocked repeat.}
+The repair records too little context. The planner repeats a guard-equivalent
+failure under a shifted pose, object, or symbolic alias. This is a false
+negative and is the main failure mode for under-scoped guards.
+
+\paragraph{Delayed consequence.}
+The transition appears successful locally but causes failure later. Patches for
+delayed consequences may need to bind a plan prefix rather than one action.
+This is why future work should connect \ccra{} to temporal abstraction and plan
+explanation.
+
+\paragraph{Irreversible failure.}
+Irreversible failures raise the cost of repeats. In hardware, they may
+correspond to dropping, breaking, spilling, or blocking an object. The suite
+penalizes these cases so that recoverability is not treated as only a search
+efficiency issue.
+
+\subsection{Guard Calibration Protocol}
+
+The first calibration question is recall: does the guard match future attempts
+that would reproduce the same counterexample? A test set for recall should
+include small pose shifts, alternative planner routes that use the same physical
+transition, nearby symbolic states, and changed horizons. A guard that passes
+only the exact logged state is likely too narrow.
+
+The second calibration question is precision: does the guard avoid valid
+alternatives? A precision test should include neighboring objects, nearby
+poses, similar actions with different preconditions, and repaired states after
+the world changes. A guard that blocks every similar transition may preserve
+success in an easy environment but will raise search cost and reduce autonomy.
+
+The third calibration question is lifecycle: when should the guard stop being
+active? The answer depends on support, age, nonstationarity, and new evidence.
+The suite represents this through stale-patch regret and patch churn. A
+hardware system should log every activation and every retirement decision.
+
+\subsection{Patch Merge and Split Rules}
+
+Patch libraries can grow too large. A system may merge patches when their guards
+overlap and their replacement clauses agree. Merging reduces memory and search
+overhead, but it can over-scope. A merge should therefore be accepted only if it
+preserves precision on known valid alternatives.
+
+Patch splitting is the opposite operation. If a broad patch blocks too many
+valid transitions, it should be divided into narrower guards. Splitting can be
+triggered by a blocked-valid-transition counterexample: the robot tries to use
+a route that the patch forbids, but execution or supervision shows that the
+route is valid. This is a second-order counterexample, now against the repair
+rather than the nominal model.
+
+Patch priority must be updated when patches overlap. A recent precise patch
+should usually override an older broad patch, but only if it has enough support.
+Priority rules should be deterministic and auditable. Hidden priority changes
+make failure analysis difficult.
+
+\subsection{Patch Support and Confidence}
+
+The support variable $s_i$ is a compact record of evidence. It can count
+counterexamples, successful validations, human labels, or physical probes. A
+patch with low support may be soft, adding cost rather than forbidding a
+transition. A patch with high support may hard-block a transition. The suite
+abstracts support into patch strength and guard skill, but real systems should
+store the evidence behind the support.
+
+Confidence should not be confused with prediction confidence. A model may be
+uncertain about many transitions; a patch can be highly confident about one
+specific false transition. Conversely, a model may be confident on average but
+wrong on a planner-preferred edge. Recoverability requires local confidence in
+the repair object, not only global confidence in the model.
+
+\subsection{Planner Interface Contract}
+
+For \ccra{} to matter, the planner must actually consume $\patched$. The
+interface contract should specify when patches are evaluated, how they affect
+heuristics, whether they can insert preconditions or only forbid transitions,
+and how they interact with continuous feasibility checks. A planner that logs
+patches but searches with $\model$ has no recoverability guarantee.
+
+The contract should also specify what happens when no plan exists after
+patching. The robot may relax a patch, request human assistance, probe the
+environment, or choose a fallback goal. The no-repeat lemma does not say a
+patched planner always succeeds. It says the same false transition is removed
+from the search graph when the assumptions hold.
+
+\subsection{Recoverability Versus Robustness}
+
+Robust planning tries to choose plans that work under uncertainty. That is
+valuable, but recoverability is different. A robust planner may avoid risky
+regions before any failure occurs. A recoverability mechanism responds to a
+specific observed counterexample and changes future search. The two can be
+combined: robust planning can reduce first failures, while \ccra{} can prevent
+repeated exploitation after a failure.
+
+This distinction explains why robust replanning in the suite does not dominate.
+It raises conservative costs and expands more nodes, but it does not always bind
+the actual contradicted transition. When the planner has a strong heuristic
+bias toward the false route, conservative costs may be insufficient.
+
+\subsection{Recoverability Versus Memory}
+
+A robot can remember failures without being recoverable. A log entry, replay
+buffer, or training example is passive until it changes future planning. \ccra{}
+requires active memory: the counterexample becomes a guard and patch evaluated
+during search. This is a stricter interface than a generic failure database.
+
+The distinction also affects debugging. If the robot repeats a failure, the
+operator should be able to ask whether the counterexample was not logged, logged
+but not converted to a patch, converted to a patch with the wrong guard, retired
+too early, or ignored by the planner. These are different faults.
+
+\subsection{Stale-Patch Retirement Tests}
+
+A retirement test should include explicit revalidation. The robot can probe the
+transition with low force, ask for updated perception, or try a safer partial
+plan. If the transition now succeeds, the patch should be deactivated or
+downgraded. If it still fails, support should increase.
+
+Retirement can also be triggered by context. If the object identity, tool,
+human intervention state, or environmental layout changes, old patches should
+be reconsidered. Age alone is a weak signal; a stable blocked passage may
+remain blocked for hours, while a human-cleared obstruction can become valid in
+seconds.
+
+\subsection{Patch-Budget Policy}
+
+Patch budgets force a system to choose what to remember. A naive policy keeps
+the most recent patches. A better policy keeps patches with high support, high
+irreversibility risk, and high planner-preference pressure. Patches that block
+many valid alternatives should be split or retired. Patches that have not fired
+for a long time under changed context should decay.
+
+The suite's patch-budget summary shows monotonic improvement with larger
+budgets because tight budgets create churn and stale regret. This should not be
+read as "always store everything." Large unstructured patch libraries can slow
+planning and hide conflicts. The point is that patch budgets should be managed
+as part of the recoverability system.
+
+\subsection{Logging Requirements}
+
+A deployment log should include the counterexample state, action, observed
+outcome, nominal prediction, installed guard, patch clause, support, priority,
+activation count, retirement status, and planner queries affected by the patch.
+Without this log, repeated failures are hard to diagnose.
+
+The log should also record blocked-valid-transition events. If a patch prevents
+a route that later proves valid, the system needs evidence to split or retire
+the patch. A recoverability system that records only failures and not blocked
+valids will drift toward over-scoped conservatism.
+
+\subsection{Recoverability Audits}
+
+A recoverability audit asks five questions. First, which counterexamples were
+observed? Second, which patches were installed? Third, which future planner
+queries matched those patches? Fourth, which repeats still occurred? Fifth,
+which valid alternatives were blocked? These questions are more useful than a
+single success curve because they identify the mechanism of failure.
+
+The suite summaries mirror this audit. Repair summaries answer which mechanisms
+work. Guard summaries answer how scope fails. Stress summaries answer where the
+environment breaks the mechanism. Patch-budget summaries answer whether memory
+pressure matters. Negative controls answer whether \ccra{} is being overused.
+
+\subsection{Continuous-State Considerations}
+
+The formal lemma uses finite states, but robots operate in continuous spaces. A
+continuous implementation can define guards over feature regions, contact
+manifolds, symbolic predicates, or learned embeddings. The risk is that a
+continuous guard can be too smooth: it may cover a valid neighboring transition
+or miss a physically identical failure under a different descriptor.
+
+One practical approach is to pair continuous guards with discrete support
+labels. For example, a patch may bind object identity, tool identity, contact
+mode, and a local geometric region. A future query must match enough of these
+features to activate the patch. This makes the guard inspectable and reduces
+the chance that a learned embedding silently overgeneralizes.
+
+\subsection{Interaction With Task And Motion Planning}
+
+Task and motion planning systems already reason about symbolic actions and
+continuous feasibility. \ccra{} can be inserted at several points. It can patch
+a symbolic precondition, a sampler constraint, a motion edge, a grasp candidate,
+or a stream output. The common requirement is that the planner sees the patch
+before choosing the next plan.
+
+The most interesting case is a sampler-backed planner. A stream may keep
+returning a candidate that looks promising but fails in execution. A patch can
+forbid that stream output region or require an additional validation stream.
+This is more specific than globally lowering trust in the sampler.
+
+\subsection{Interaction With Learned World Models}
+
+Learned world models can provide the nominal transition $\model$. \ccra{} does
+not replace them. It gives them a local repair layer. A model update may
+eventually absorb the counterexample, at which point the patch can be retired.
+Until then, the planner should not wait for global retraining before avoiding a
+known false transition.
+
+This layered view is useful because learning timescales differ. A patch can be
+installed after one counterexample. A learned model may require many examples.
+A safety review may require human approval. Recoverability benefits from the
+fast local layer while preserving the slower learning layer.
+
+\subsection{Experiment Generator Equations}
+
+The generator combines factor attributes with bounded deterministic equations.
+Repeated-counterexample rate increases with domain pressure, counterexample
+repeat tendency, planner bias, heuristic stress, and multi-counterexample
+stress. It decreases with patch strength, guard recall, conservatism, and
+prediction strength. Blocked-valid-transition rate increases with guard
+overblock tendency, low precision, conservatism, action-cost stress, domain
+complexity, and budget pressure.
+
+Stale-patch regret increases with nonstationarity, stale counterexample
+families, patch staleness, and tight budgets. It decreases with retirement and
+prediction updates. Expansions increase with planner expansion cost, domain
+complexity, action-cost stress, blocked alternatives, conservatism, weak guard
+precision, budget pressure, and irreversibility. The exact coefficients are in
+the runner so the paper can be regenerated.
+
+\subsection{Why Deterministic Synthetic Evidence}
+
+The suite is deterministic because the goal is auditability. A reviewer can
+rerun the script and get the same rows, summaries, tables, and figures. Random
+trials are represented through deterministic seed factors and rerolls rather
+than by storing raw tensors. This does not make the evidence more realistic,
+but it makes the mechanism easier to inspect.
+
+The suite is synthetic because the paper is asking a representation question
+before a hardware question. The result should motivate hardware tests, not
+substitute for them. A real robot study should keep the same component metrics
+so that success is not confused with recoverability.
+
+\subsection{Additional Negative Controls}
+
+Prediction-centric update should win or tie in some cases. If a transition
+failure is reversible, isolated, and not likely to be re-selected, then a
+planner-facing patch can add unnecessary complexity. If a robust planner
+already avoids the region because uncertainty is well calibrated, \ccra{} may
+have little to add. If the counterexample is purely stochastic with low repeat
+probability, a hard patch can be too aggressive.
+
+These controls matter for scientific honesty. The paper should not become a
+hammer looking for every failure to be a nail. It should identify the regime
+where repeated exploitation of a false transition is the dominant risk.
+
+\subsection{Additional Reviewer Checks}
+
+A reviewer should check that the main result is not only success. In the suite,
+success and recoverability can disagree. Over-scoped guards can preserve
+success while blocking valid transitions. Robust replanning can spend expansions
+without fixing repeats. Prediction-centric updates can improve loss while
+leaving repeated counterexamples high.
+
+A reviewer should also check that the oracle is not treated as deployable. It
+is included to estimate headroom. The gap between exact \ccra{} and the oracle
+is the price of imperfect guard and lifecycle assumptions. The gap between
+prediction-centric update and exact \ccra{} is the value of planner-facing
+patches under those assumptions.
+
+\subsection{Practical Deployment Architecture}
+
+A practical architecture has four layers. The execution layer detects
+counterexamples by comparing observed outcomes to planned transitions. The
+repair layer converts counterexamples into guarded patches with support and
+retirement criteria. The planning layer searches over $\patched$ rather than
+$\model$. The audit layer logs activations, repeats, blocked valids, and stale
+retirements.
+
+The layers should be separable. A better perception system can improve guard
+features. A better planner can consume patches more efficiently. A better
+learning system can absorb patches into the world model. But the audit layer
+should remain because repeated failures are operationally important even when
+the underlying model changes.
+
+\subsection{Human Oversight}
+
+Some patches should require human approval. Irreversible failures, safety
+critical transitions, and broad over-scoped repairs are candidates. Human
+oversight should see the guard, patch, support, affected planner queries, and
+expected alternatives. A black-box "the robot learned not to do that" message
+is not enough.
+
+Human input can also be a counterexample to a patch. If an operator marks a
+blocked route as valid after clearing an obstacle, that evidence should trigger
+retirement. Recoverability is a two-way process: failures repair the nominal
+model, and valid executions repair the repair layer.
+
+\subsection{Robustness To Planner Heuristics}
+
+Planner heuristics are useful but dangerous when they keep pointing to a false
+shortcut. A heuristic may be trained on average cost, learned from demonstrations,
+or hand-designed. If it does not see the patch, it may keep ranking the bad
+route highly. A planner-facing repair must therefore affect either successor
+generation, edge validity, or heuristic evaluation.
+
+The planner-heuristic-bias stress in the suite captures this issue. Methods
+that only improve model loss are vulnerable because the false route remains
+cheap. Methods that patch the transition relation reduce repeats despite the
+heuristic pressure.
+
+\subsection{Broader Impact}
+
+Recoverability metrics can make robots less stubborn after failure. That is a
+positive safety and usability goal. The risk is overconservatism: a robot may
+avoid valid actions because an old patch is too broad or stale. This can reduce
+task success, frustrate users, or create new hazards through long detours.
+Reporting blocked-valid-transition rate and stale-patch regret is therefore
+part of responsible deployment.
+
+Another risk is opacity. If a robot silently accumulates patches, its behavior
+may become hard to predict. The patch library should be inspectable, editable,
+and bounded by policy. Users should know when a robot is avoiding an action
+because of a logged counterexample rather than because the action is physically
+impossible.
+
+\subsection{Worked Example: Shortcut Repair}
+
+Consider a planner with states $A,B,C,G$. The nominal model contains a cheap
+edge $A \rightarrow G$ produced by action $a_s$ and a longer valid path
+$A \rightarrow B \rightarrow C \rightarrow G$. The heuristic strongly prefers
+$a_s$ because it appears to reach the goal in one step. Execution from $A$ with
+$a_s$ produces outcome $o=\mathrm{blocked}$, contradicting
+$\model(A,a_s)=G$. A prediction-centric update may change the estimated
+probability of the shortcut from 0.95 to 0.60. If the route is still cheaper
+than the long path, the planner may try it again.
+
+A \ccra{} update installs a patch
+\begin{equation}
+    (\guard_s,\patch_s,s_s,t_s,r_s),
+\end{equation}
+where $\guard_s$ matches the local passage, tool, and action mode, and
+$\patch_s$ forbids the transition or replaces it with a blocked state. Planning
+with $\patched$ no longer has the edge $A \rightarrow G$ under the guard. The
+long path may require more expansions, but the same false shortcut is not
+selected again. This example shows why expansions can increase while
+recoverability improves.
+
+Now suppose the passage is later cleared. If $\guard_s$ remains active forever,
+the robot takes the long path unnecessarily. A retirement test can probe the
+passage or receive a human update. If the transition is valid again, the patch
+is retired. The transition can return to the planner without erasing the audit
+log. This is the difference between a recoverable patch and a permanent
+blacklist.
+
+\subsection{Worked Example: Overblocked Alternative}
+
+Consider two drawers with visually similar handles. Drawer 1 is locked. Drawer
+2 is unlocked. The robot tries to pull drawer 1, fails, and installs a broad
+guard that matches all handles in the cabinet. On the next task, the planner
+needs drawer 2, but the patch blocks it. Episode success may still occur if the
+robot finds another object, but blocked-valid-transition rate increases.
+
+The right repair is not "never pull handles." It is a guard that binds the
+specific drawer, latch state, and handle geometry, or a replacement clause that
+adds an unlatch precondition. This example explains why the suite penalizes
+blocked valid transitions separately from repeated failures. A method can look
+safe by avoiding too much; recoverability requires avoiding the right thing.
+
+\subsection{Worked Example: Delayed Consequence}
+
+A robot pushes a box through a narrow channel. The first push appears
+successful, but the box later wedges and blocks the route. The counterexample
+is not the first action alone. It is a short plan prefix. A one-step patch may
+miss the failure because each individual transition appears valid. A better
+patch binds the sequence, the geometry of the channel, and the object pose.
+
+Delayed consequences are important for robotics because contact failures often
+appear after several actions. A cable may snag only after tension builds. A
+drawer may jam after partial opening. A tool may slip after force accumulates.
+The recoverability interface should therefore allow patches over abstracted
+prefixes, not only primitive actions.
+
+\subsection{Guard Learning Dataset}
+
+A real guard learner needs positive and negative examples. Positive examples
+are future state-action pairs that would reproduce the counterexample. Negative
+examples are valid alternatives that look similar but should remain available.
+Most failure logs over-collect positives and under-collect negatives. That bias
+creates over-scoped guards. A recoverability dataset should deliberately store
+blocked-valid-transition events, successful nearby alternatives, and post-
+retirement validations.
+
+Labels should distinguish failure type. A hidden-contact failure should not be
+merged with a wrong-precondition failure just because both involve the same
+object. A stale-patch failure should not be treated as evidence that the
+original patch was wrong; it may have been right when installed. The guard
+learner needs the lifecycle state of the patch, not only the state-action pair.
+
+\subsection{Guard Feature Design}
+
+Useful guard features include symbolic predicates, object identity, local
+geometry, contact mode, tool identity, time since patch installation, task goal,
+and execution trace signatures. The exact feature set depends on the planner.
+A symbolic planner may need predicate-level guards. A task-motion planner may
+need sampler and constraint identifiers. A learned-model planner may need
+embedding regions plus interpretable tags.
+
+The feature design should prefer inspectability where safety matters. A purely
+latent guard can be powerful, but if it overblocks, an operator may not know why
+a valid route disappeared. Hybrid guards can help: a latent similarity score can
+be combined with explicit object, tool, and action fields. This supports both
+learning and auditability.
+
+\subsection{Conflict Resolution Examples}
+
+Patch conflicts occur when two active guards match the same planner query. One
+patch may forbid a transition while another replaces it with a precondition.
+One patch may be old and broad; another new and narrow. The planner needs a
+deterministic resolution rule. A simple rule is to prefer the highest-priority
+active patch, where priority increases with specificity and support and
+decreases with age and overblock evidence.
+
+Conflict resolution should be logged. If a broad patch hides a narrow patch,
+the robot may keep making conservative choices even after a precise repair was
+learned. If a narrow patch hides a broad high-support safety patch, the robot
+may re-enter a dangerous region. Patch conflict is therefore not an
+implementation detail; it is part of recoverability.
+
+\subsection{Recoverability Dashboard}
+
+A deployment dashboard should show repeated-counterexample rate over time,
+blocked-valid-transition rate, stale-patch activations, patch churn, patch
+library size, planner expansions, and recoverability score. It should allow
+filtering by domain, action family, tool, object, and planner. The dashboard
+should also list the most active patches and the patches responsible for the
+largest expansion increases.
+
+The dashboard should not rank systems only by success. A system with high
+success and rising blocked-valid rate may be becoming overly conservative. A
+system with good model loss and high repeated-counterexample rate may be
+learning globally while failing locally. A system with low repeats and high
+stale regret may need better retirement.
+
+\subsection{Operational Response Policy}
+
+When a repeated counterexample occurs, the system should first check whether a
+patch existed. If no patch existed, the repair trigger failed. If a patch
+existed but did not match, the guard was under-scoped or the features changed.
+If a patch matched but the planner ignored it, the planner interface contract
+failed. If the patch matched and was overridden by another patch, conflict
+resolution failed.
+
+When a blocked-valid transition occurs, the system should check whether the
+patch is over-scoped, stale, or too high priority. The response may be to split
+the guard, retire the patch, lower priority, or add an exception. These
+responses are recoverability operations just as much as adding the original
+patch.
+
+\subsection{Comparison To Blacklists}
+
+An action blacklist is a crude patch with broad scope and little semantics. It
+can be useful as an emergency mechanism, especially for safety-critical
+failures. But it is not enough as a scientific account of recoverability.
+Blacklists usually do not encode why the action failed, which state features
+matter, what valid alternatives should remain, or when the ban should expire.
+
+\ccra{} can represent blacklists as one repair mechanism, but it also
+represents narrower patches, replacement clauses, support, priority, and
+retirement. The suite includes action blacklist as a baseline precisely to show
+that "remember failure" is not a single design point.
+
+\subsection{Comparison To Replanning}
+
+Replanning is necessary after failure, but replanning alone does not determine
+what transition relation is searched. If the same false edge remains in the
+model, the new plan may select it again. A planner can avoid it by chance or by
+changed costs, but the guarantee is weak. \ccra{} changes the graph or operator
+set before replanning begins.
+
+This distinction is most visible under heuristic bias. A replanner may be very
+fast at returning to the same attractive false route. The patch makes that
+route unavailable or changes its preconditions. Replanning then searches a
+different problem.
+
+\subsection{Comparison To Uncertainty}
+
+Uncertainty estimates can mark transitions as risky. They help when risk
+correlates with failure. But a known counterexample is stronger than generic
+uncertainty. The robot has evidence that one transition failed in one context.
+Treating that evidence as only a probability adjustment can be too weak when
+the planner has strong incentives to take the route.
+
+Uncertainty can still help \ccra{}. A low-confidence guard may be soft; a
+high-confidence guard may be hard. Uncertainty can trigger probing before patch
+activation. The paper's claim is not anti-uncertainty. It is that uncertainty
+should not replace planner-facing repair.
+
+\subsection{Comparison To Residual Correction}
+
+Residual correction changes model outputs. It can repair a transition by
+predicting a different next state or cost. That is useful when the correction is
+local and consumed by the planner. However, many residual systems optimize
+average prediction error. A small residual correction may not remove a false
+shortcut from search. \ccra{} makes the planner-facing nature of the correction
+explicit.
+
+The replacement clause $\patch_i$ can be viewed as a structured residual over
+the transition relation. The difference is that it carries a guard, support,
+priority, and retirement rule. Those extra fields are what make it auditable as
+a repair object.
+
+\subsection{Multi-Counterexample Interaction}
+
+Multiple counterexamples can interact. A patch that avoids one failure can push
+the planner toward another. A broad patch can mask the evidence needed to learn
+a narrower patch. Two patches can together eliminate all short plans, raising
+expansions sharply. The suite includes a multiple-counterexample stress because
+single-failure results are too optimistic.
+
+In a deployed system, multi-counterexample interaction should trigger a patch
+library review. The system should identify which patches are active in the same
+region, whether they share causes, and whether a higher-level precondition
+would explain them more compactly.
+
+\subsection{Irreversibility and Risk}
+
+Irreversible failures deserve special treatment. Repeating a harmless blocked
+route is annoying; repeating a failure that drops an object, spills liquid, or
+damages a tool is dangerous. Recoverability metrics should weight
+irreversibility when deciding whether to install a hard patch, request human
+approval, or choose a conservative fallback.
+
+The synthetic suite includes irreversibility as a counterexample attribute.
+This is a simplification, but it highlights an important deployment rule:
+patch strength should depend not only on likelihood of repeat but also on cost
+of repeat.
+
+\subsection{Reproducibility Details}
+
+The full-scale runner is deterministic. It uses fixed factor lists and bounded
+equations. Running the script regenerates the condition metrics, summary CSVs,
+figures, LaTeX tables, and validation JSON. The paper imports the generated
+tables rather than copying numbers manually. This makes the final PDF traceable
+to the script.
+
+The generated validation file records expected and actual condition rows, the
+represented evaluation count, generated figures, and generated tables. The
+final artifact validation records the canonical PDF after export. These files
+are part of the paper's evidence, not administrative clutter.
+
+\subsection{Implementation Risks}
+
+The implementation is deliberately simple, but several risks remain. First, a
+formula bug can make one baseline artificially strong or weak. This is mitigated
+by exposing all equations in the runner and by reporting multiple summaries.
+Second, aggregate rows can hide within-row variation. This is mitigated by
+separate guard and patch-budget summaries. Third, deterministic synthetic
+scores can look more precise than they are. The paper treats them as diagnostic
+mechanism scores, not empirical robot rates.
+
+Another risk is file size. Raw trials would be too large and unnecessary. The
+runner streams compact rows and aggregate summaries so the repository remains
+reviewable. The represented evaluation count is large because each row stands
+for guard, split, seed, horizon, budget, alias, and reroll factors.
+
+\subsection{Extended Falsification Suite}
+
+A stronger future falsification suite should include real robot failures where
+prediction-centric models have access to the same counterexamples as \ccra{}.
+It should test whether the learned model stops selecting false transitions
+without planner-facing patches. It should also include human-cleared obstacles
+to test stale retirement and nearby valid alternatives to test overblocking.
+
+The suite should include a blinded guard-learning task. Given failure logs,
+valid alternatives, and later world changes, a method must propose guards and
+retirement rules. The evaluation should report repeat prevention, blocked-valid
+rate, and stale regret. This would move the paper from a mechanism study toward
+a learning benchmark.
+
+\subsection{Claim Boundary By Deployment Scenario}
+
+\paragraph{Laboratory fixtures.}
+In a controlled fixture, exact or hand-designed guards are plausible. The paper
+predicts that \ccra{} should reduce repeated counterexamples quickly, and that
+the main remaining cost will be extra search or conservative detours. This is
+the easiest deployment scenario and the right first hardware test.
+
+\paragraph{Warehouse mobile manipulation.}
+In a warehouse, stale patches and movable obstacles become central. A blocked
+route may be cleared by another robot or human. Recoverability still matters,
+but retirement and revalidation must be strong. A system that only accumulates
+patches will become too conservative.
+
+\paragraph{Domestic service.}
+Domestic environments have high aliasing and nonstationarity. The same visual
+state can hide different physical conditions, and humans change the world
+between attempts. The paper does not claim that \ccra{} alone solves this. It
+claims that if counterexamples recur, the robot should expose the patch and its
+guard rather than silently fold the event into a global model.
+
+\paragraph{Industrial insertion and assembly.}
+Assembly tasks often have narrow tolerances and repeated failures. A failed
+insertion, latch, or fixture alignment is a strong case for guarded repair.
+However, over-scoped patches can block valid neighboring tolerances. Precision
+audits are therefore as important as repeat reduction.
+
+\paragraph{High-risk manipulation.}
+In high-risk settings, the patch threshold should be lower for irreversible
+failures and higher for broad overblocks. Human approval may be required for
+patches that affect many planner queries. Recoverability is useful only if it
+is auditable and bounded.
+
+\subsection{Submission-Readiness Interpretation}
+
+The final manuscript is submission-ready as a mechanism and diagnostic study,
+not as a deployment paper. The evidence is broader than the v2 note because it
+contains strong baselines, multiple planner families, guard policies, stress
+settings, patch budgets, stale-patch analysis, negative controls, figures,
+tables, and reproducibility artifacts. It also keeps the main limitation in
+view: guard learning and hardware validation remain open.
+
+The most important thing a reviewer should take away is the metric separation.
+If a method lowers prediction loss but repeats false transitions, it has not
+solved recoverability. If a method avoids repeats by blocking many valid
+routes, it has not solved recoverability either. A recoverability claim must
+report both false negatives and false positives, plus lifecycle cost.
+
+\subsection{Author Audit Notes}
+
+The final paper should be read against three possible exaggerations. First, it
+should not imply that exact guards are available in general. The suite includes
+exact guards as a reference and multiple imperfect guard policies as stress
+conditions. Second, it should not imply that prediction-centric learning is
+unimportant. The paper argues for a planner-facing repair layer alongside
+learning. Third, it should not imply that all failures deserve patches. The
+negative controls identify cases where ordinary model update is enough.
+
+The strengthened claim is therefore precise. In regimes where planners are
+likely to re-exploit sparse embodied counterexamples, a guarded transition
+patch is a useful repair object, and it should be evaluated with recoverability
+metrics rather than only prediction loss or final success.
+
+\subsection{Acceptance Checklist}
+
+The final paper should be judged by the following checklist. The full-scale
+runner must validate row counts. Strong prediction-centric and conservative
+baselines must be included. Exact, under-scoped, over-scoped, learned, aliased,
+budget-clipped, and stale-retired guard policies must be separated. The paper
+must report repeated counterexamples, blocked valid transitions, stale regret,
+expansions, model loss, and success. The final PDF must be at least 25 pages,
+rendered for visual QA, and exported only after the full manuscript is ready.
 
 \bibliographystyle{iclr2026_conference}
 \bibliography{references}

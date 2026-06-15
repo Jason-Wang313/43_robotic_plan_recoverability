@@ -1,14 +1,20 @@
 # Reviewer Attacks
 
-- This is just online system identification.
-- This is just residual learning.
-- This is just MPC with a learned model.
-- This is just a benchmark.
-- The evidence is synthetic.
-- Exact guard scope is unrealistic.
-- Over-scoped repair may block valid plans.
-- Under-scoped repair may miss repeated failures.
+1. This is just replanning.
+2. This is just model learning with memory.
+3. Exact guards are unrealistic.
+4. Over-scoped patches can hide valid plans.
+5. Under-scoped patches miss repeated failures.
+6. Stale patches can make the robot conservative forever.
+7. Success rate alone can hide the real tradeoff.
+8. Synthetic suites can hide convenient assumptions.
+9. Robust replanning may solve the problem with enough search.
+10. Prediction-centric update may solve the problem with enough data.
 
-## V2 outcome
+## v3 response
 
-The guard-scope attacks are real and now define the paper boundary. Under-scoped CCRA reaches only 0.859 success, while over-scoped CCRA keeps 1.000 success but raises mean expansions to 2.746. The paper should be judged as a narrow mechanism note whose main open problem is calibrated guard extraction and retirement.
+Attacks 3, 4, 5, and 6 are accepted and built into the final design. The paper reports exact, under-scoped, over-scoped, aliased, learned, budget-clipped, and stale-retired guards separately.
+
+Attacks 1, 2, 9, and 10 are addressed with baselines. Replanning, prediction-centric update, uncertainty penalties, action blacklists, global retraining proxies, and robust replanning are included.
+
+Attack 8 remains a real limitation. The paper is explicit that the suite is synthetic and diagnostic. The hardware validation and falsification sections specify what future robot evidence must test.

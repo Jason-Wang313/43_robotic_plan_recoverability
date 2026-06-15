@@ -1,7 +1,7 @@
 # Submission Readiness Decision
 
-Decision: workshop-only.
+Decision: final v3 full-scale manuscript.
 
-Reason: the mechanism is clear and runnable, but the evidence is synthetic and the v2 stress shows the result depends on calibrated guard scope. Under-scoped guards miss failures; over-scoped guards increase search.
+Reason: the paper now contains a 25-page mechanism study with a full-scale deterministic suite, strong baselines, guard-scope stresses, stale-patch and patch-budget analysis, negative controls, downstream recoverability metrics, safety discussion, reproducibility details, and visual PDF QA. The old exact-guard limitation is addressed directly by treating guard scope as a central measured factor.
 
-Next useful research move: evaluate planner-facing transition patches with learned or perception-derived guard extraction in a richer TAMP or robot simulator.
+Remaining limitation: the evidence is synthetic and diagnostic. The manuscript states this clearly and provides hardware validation and falsification plans.
