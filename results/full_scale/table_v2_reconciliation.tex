@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\caption{Reconciliation with the v2 guard-scope stress. V3 keeps the guard-scope lesson while adding repeated-counterexample, stale-patch, blocked-valid-transition, and planner-cost metrics.}
+\label{tab:v2-reconciliation}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Condition & Success & Recover. & Repeat & Exp. \\
+\midrule
+V2 exact CCRA & 1.000 & - & 0.000 & 2.01 \\
+V2 under-scoped guard & 0.859 & - & 0.141 & 1.59 \\
+V2 over-scoped guard & 1.000 & - & 0.000 & 2.75 \\
+v3\_exact\_ccra & 0.726 & 0.623 & 0.189 & 3.37 \\
+v3\_learned\_guard\_ccra & 0.714 & 0.603 & 0.216 & 3.42 \\
+v3\_ccra\_with\_retirement & 0.729 & 0.652 & 0.211 & 3.40 \\
+v3\_oracle\_guard\_ccra & 0.770 & 0.732 & 0.146 & 3.34 \\
+\bottomrule
+\end{tabular}
+\end{table}

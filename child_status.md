@@ -1,22 +1,21 @@
 # Child Status 43
 
-Status: workshop_only
-Attempt: 1
-Stage: v2_submission_hardening
+Status: final_v3_full_scale
+Attempt: 2
+Stage: final_full_scale_submission_hardening
 
 Current facts:
-- Literature and synthesis docs are present under `docs/`.
-- Original synthetic recoverability artifacts are present under `results/` and `figures/`.
-- V2 guard-scope stress artifacts are present at `results/guard_scope_stress.json`, `results/guard_scope_stress.csv`, and `paper/guard_scope_stress_table.tex`.
-- Exact CCRA reaches 1.000 success in the v2 stress.
-- Under-scoped guards fall to 0.859 success.
-- Over-scoped guards preserve 1.000 success but raise mean expansions to 2.746 versus 2.008 for exact guards.
-- Canonical PDF target: `C:/Users/wangz/Downloads/43.pdf`.
-- Canonical PDF size: 161408 bytes.
-- Local generated paper PDF is removed after build.
-- Desktop PDF copy is absent.
+- Full-scale execution plan was written before v3 edits.
+- Full-scale suite completed with 241,920 compact condition rows.
+- Represented evaluations: 543,449,088,000.
+- Final manuscript is 25 pages.
+- Canonical PDF: `C:/Users/wangz/Downloads/43.pdf`.
+- Canonical SHA-256: `39E6A9709EFD4D6E6960E5486FC269A42A62B9877110128FFD0819098ED3EB5C`.
+- Canonical bytes: 389065.
+- Local generated `paper/main.pdf` is removed after export.
+- Visual render QA was performed on the canonical Downloads PDF.
 
 Decision:
-- Workshop-only. The supported contribution is planner-facing recoverability with calibrated guard scope, not real-robot readiness or automatic guard learning.
+- Final v3 manuscript. The contribution is planner-facing recoverability via counterexample-conditioned guarded transition repair, with guard scope, stale patches, and planner cost treated as core metrics.
 
-End time: 2026-06-13 09:08:23 +01:00
+End time: 2026-06-16 00:43:09 +01:00

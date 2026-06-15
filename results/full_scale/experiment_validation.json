@@ -1,0 +1,26 @@
+{
+  "status": "complete",
+  "expected_condition_rows": 241920,
+  "actual_condition_rows": 241920,
+  "represented_trial_evaluations": 543449088000,
+  "figures": [
+    "recoverability_map.pdf",
+    "repair_stress_heatmap.pdf",
+    "prediction_loss_vs_repeat.pdf",
+    "guard_precision_recall_tradeoff.pdf",
+    "expansion_recoverability_tradeoff.pdf",
+    "stale_patch_regret.pdf"
+  ],
+  "tables": [
+    "table_scale.tex",
+    "table_main_performance.tex",
+    "table_guard_summary.tex",
+    "table_stress_summary.tex",
+    "table_planner_summary.tex",
+    "table_counterexample_summary.tex",
+    "table_domain_summary.tex",
+    "table_patch_budget_summary.tex",
+    "table_negative_controls.tex",
+    "table_v2_reconciliation.tex"
+  ]
+}

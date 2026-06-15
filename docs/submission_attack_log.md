@@ -1,25 +1,33 @@
 # Submission Attack Log
 
-## Attack: exact guard assumption
+## Attack: exact guard dependence
 
-Question: Does CCRA still prevent repeated failure if guards miss some false transitions?
+Question: Does the result depend on perfectly scoped guards?
 
-Result: under-scoped CCRA falls to 0.859 success.
+Result: the v2 stress showed that guard scope is a central assumption. The v3 suite includes eight guard policies and reports precision, recall, blocked valid transitions, repeated counterexamples, and stale-patch regret.
 
-Decision impact: narrows the paper to calibrated guard scope.
+Decision impact: final paper makes guard scope a measured bottleneck.
 
-## Attack: over-scoped repair
+## Attack: prediction-centric update is enough
 
-Question: Does broad repair block valid alternatives?
+Question: Can model update solve the problem without planner-facing patches?
 
-Result: over-scoped CCRA keeps 1.000 success but raises mean expansions to 2.746 versus 2.008 for exact guards.
+Result: prediction-centric update has low model loss but repeated-counterexample rate 0.480 and recoverability 0.326, below exact CCRA and CCRA with retirement.
 
-Decision impact: guard scope must be a central limitation.
+Decision impact: supports the metric separation between prediction quality and recoverability.
+
+## Attack: robust replanning is enough
+
+Question: Can conservative replanning solve the problem by expanding more alternatives?
+
+Result: robust replanning has higher mean expansions and lower recoverability than CCRA variants in the full-scale suite.
+
+Decision impact: supports the need for transition-level repair objects.
 
 ## Attack: real-robot readiness
 
-Question: Is there hardware, perception, or automatic guard learning?
+Question: Is there hardware or high-fidelity contact evidence?
 
-Result: no.
+Result: no. The paper is framed as a full-scale synthetic mechanism study with hardware validation plans and falsification criteria.
 
-Decision impact: workshop-only.
+Decision impact: limits the claim to representation, metrics, and diagnostics.
