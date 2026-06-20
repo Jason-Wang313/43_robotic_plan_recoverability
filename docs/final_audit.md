@@ -26,9 +26,10 @@ The final paper tests recoverability at scale. Prediction-centric update has low
 - Canonical PDF: `C:/Users/wangz/Downloads/43.pdf`
 - Pages: 25.
 - File bytes: 389065.
-- SHA-256: `39E6A9709EFD4D6E6960E5486FC269A42A62B9877110128FFD0819098ED3EB5C`
+- SHA-256: `196DA3F15CE1C0EF79D88FD62301606E9D6BCFC36D12F124D17D68F27A1FC348`
 - Local tracked/generated PDF: removed after build.
 - Render QA: canonical Downloads PDF rendered to PNG pages and contact sheet under `tmp/pdfs/` before cleanup.
+- VLA-style link-box QA: affected pages 1, 4, 5, and 8 rendered at 160 dpi; verified 34 green citation boxes, 1 red internal-reference box, and 35 visible `(0, 0, 1)` borders with no visual collisions.
 
 ## Repository
 
