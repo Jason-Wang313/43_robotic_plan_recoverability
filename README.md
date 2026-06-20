@@ -8,9 +8,11 @@ Status: final v3 full-scale manuscript.
 
 Canonical PDF: `C:/Users/wangz/Downloads/43.pdf`
 
-Canonical PDF SHA-256: `39E6A9709EFD4D6E6960E5486FC269A42A62B9877110128FFD0819098ED3EB5C`
+Canonical PDF SHA-256: `196DA3F15CE1C0EF79D88FD62301606E9D6BCFC36D12F124D17D68F27A1FC348`
 
 The v3 paper reframes the earlier guard-scope stress into a full recoverability study. Exact guarded repair remains useful, but the final manuscript evaluates repeated counterexamples, blocked valid transitions, stale-patch regret, patch churn, planner expansions, and model loss across a large deterministic suite.
+
+The final PDF also uses visible VLA-style link boxes: green citation boxes, red internal-reference boxes, and thin boxed borders verified on affected pages 1, 4, 5, and 8.
 
 ## Full-scale suite
 

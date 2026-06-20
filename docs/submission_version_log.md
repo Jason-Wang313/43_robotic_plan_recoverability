@@ -19,4 +19,9 @@
 - Rewrote the manuscript around recoverability metrics and counterexample-conditioned repair automata.
 - Added full-scale tables, figures, guard policies, stress tests, patch-budget analysis, negative controls, safety, and reproducibility appendices.
 - Built and visually checked the 25-page canonical PDF at `C:/Users/wangz/Downloads/43.pdf`.
-- Final SHA-256: `39E6A9709EFD4D6E6960E5486FC269A42A62B9877110128FFD0819098ED3EB5C`.
+- Final SHA-256: `196DA3F15CE1C0EF79D88FD62301606E9D6BCFC36D12F124D17D68F27A1FC348`.
+
+## v3 visual hardening
+
+- Rebuilt the same 25-page manuscript with visible VLA-style red/green link boxes.
+- Verified affected pages 1, 4, 5, and 8 by PNG render.
